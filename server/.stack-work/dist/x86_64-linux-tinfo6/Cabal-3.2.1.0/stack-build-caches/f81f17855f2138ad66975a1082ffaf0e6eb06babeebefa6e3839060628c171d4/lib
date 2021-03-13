@@ -1,8 +1,8 @@
-/home/hades/haskell/pollem/server/server.cabal:
-  hash: 6ca0862468b04c7db0deae7f517a0dd236faf3ae71cf51256842aa92dbd8c5b2
-/home/hades/haskell/pollem/server/.stack-work/dist/x86_64-linux-tinfo6/Cabal-3.2.1.0/build/autogen/Paths_server.hs:
-  hash: 8cc93586fa7252caa55ba62f098508231bea29e9d000f249bb5d676b103e469c
+/home/hades/haskell/pollem/server/.stack-work/dist/x86_64-linux-tinfo6/Cabal-3.2.1.0/build/autogen/Paths_pollem.hs:
+  hash: c1f72561aa1dd371062a9def5fa4b449e123251531d07be2ea2f1e88587750db
 /home/hades/haskell/pollem/server/package.yaml:
-  hash: 523d0ab383f77c9539a36c1540c94674f454c4be242b435ce7372be348b7344f
+  hash: 397ad50b57c116cfaf1786d2139240a60692d369c887621d956268e9365de6c8
 /home/hades/haskell/pollem/server/src/Lib.hs:
-  hash: 7ad063eecdb1e2199a5ec31d0a65a14d5c02677ead2e514975ea390689ca1eca
+  hash: 6f17f3e24a77f712d6901b846f08467650b8184e6d4b8927264a3fcb086f558b
+/home/hades/haskell/pollem/server/pollem.cabal:
+  hash: d6b7b9336822c174f0f0f59fba358d513be6ac3f2c5364660cf9ef13c5145ffb

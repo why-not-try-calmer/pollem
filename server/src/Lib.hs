@@ -1,26 +1,30 @@
 {-# LANGUAGE DataKinds       #-}
+{-# LANGUAGE DeriveGeneric   #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators   #-}
+{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 module Lib
     ( startApp
     , app
     ) where
 
-import Data.Aeson
-import Data.Aeson.TH
-import Network.Wai
-import Network.Wai.Handler.Warp
-import Servant
+import           Data.Aeson
+import           Data.Aeson.TH
+import           Network.Wai
+import           Network.Wai.Handler.Warp
+import           Servant
 
-data User = User
-  { userId        :: Int
-  , userFirstName :: String
-  , userLastName  :: String
-  } deriving (Eq, Show)
+data SubmitRequest = SubmitRequest {
+    clientId            :: Int,
+    clientFingerPrint :: String,
+    clientPollId      :: Int
+} deriving (Eq, Show)
+$(deriveJSON defaultOptions ''SubmitRequest)
 
-$(deriveJSON defaultOptions ''User)
+newtype SubmitResponse = SubmitResponse { msg :: String } deriving (Eq, Show)
+$(deriveJSON defaultOptions ''SubmitResponse)
 
-type API = "users" :> Get '[JSON] [User]
+type API = "submit":> ReqBody '[JSON] SubmitRequest :> Post '[JSON] SubmitResponse
 
 startApp :: IO ()
 startApp = run 8080 app
@@ -32,9 +36,7 @@ api :: Proxy API
 api = Proxy
 
 server :: Server API
-server = return users
-
-users :: [User]
-users = [ User 1 "Isaac" "Newton"
-        , User 2 "Albert" "Einstein"
-        ]
+server = submit
+    where
+        submit :: SubmitRequest -> Handler SubmitResponse
+        submit req = return (SubmitResponse "OK")

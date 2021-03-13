@@ -1,4 +1,4 @@
-name:                server
+name:                pollem
 version:             0.1.0.0
 github:              "githubuser/server"
 license:             BSD3
@@ -38,7 +38,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - base
-    - server
+    - pollem
 
 tests:
   server-test:
@@ -50,7 +50,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - base
-    - server
+    - pollem
     - hspec
     - hspec-wai
     - hspec-wai-json
