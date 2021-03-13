@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <script>
+        const ERRORS = {
+            taken: "Sorry but you appear to have taken the survey already.",
+            noLocalStorage: "localStorage API not supported",
+            noCookieSet: "Sorry but you appear to have cleared your cookies"
+        }
+        function output(id, val) { document.getElementById(id).innerHTML = val }
+        function initLocalStorage(fingerprint) {
+            if (!localStorage) { 
+                output("errors", ERRORS.noLocalStorage);
+                return;
+            }
+            if (!localStorage.getItem("pollem")) {
+                let user_state = JSON.stringify({
+                    fingerprint: fingerprint,
+                    created: [],
+                    taken: []
+                });
+                localStorage.setItem("pollem", user_state);
+                console.log("Created new localStorage key with " + user_state);
+            }
+            let user_state = localStorage.getItem("pollem");
+            output("user_state", user_state);
+            output("fresh_fingerprint", fingerprint);
+            console.log("Retrieving from storage on pollem : ", user_state);
+            // localStorage.clear();
+        }
+        function main() {
+            FingerprintJS.load().then(fp => {
+                fp.get()
+                    .then(result => initLocalStorage(result.visitorId))
+                    .then(() => console.log("Finished loading"))
+            });
+        }
+    </script>
+</head>
+
+<body>
+    <p>Errors:
+    <div id="errors"></div>
+    </p>
+    <p>Fresh fingerpint:
+    <div id="fresh_fingerprint"></div>
+    </p>
+    <p>User state:
+    <div id="user_state"></div>
+    </p>
+</body>
+<script async src="//cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js" onload="main()"></script>
+
+</html>
