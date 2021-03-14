@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d546cdd8096ef7d7257f4af1922625a0de1f4fa0fa433a227fe4835b217a6ee7
+-- hash: 28ddc3b60e267eda44b580a833f504d0b961116b6a45c303dbac8b008a5c247e
 
 name:           pollem
 version:        0.1.0.0
@@ -24,6 +24,7 @@ source-repository head
 
 library
   exposed-modules:
+      Scheduler
       Server
   other-modules:
       Paths_pollem
@@ -31,8 +32,10 @@ library
       src
   build-depends:
       aeson
+    , async
     , base >=4.7 && <5
     , servant-server
+    , time
     , wai
     , warp
   default-language: Haskell2010
@@ -46,9 +49,11 @@ executable server-exe
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
+    , async
     , base
     , pollem
     , servant-server
+    , time
     , wai
     , warp
   default-language: Haskell2010
@@ -63,12 +68,14 @@ test-suite server-test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
+    , async
     , base
     , hspec
     , hspec-wai
     , hspec-wai-json
     , pollem
     , servant-server
+    , time
     , wai
     , warp
   default-language: Haskell2010

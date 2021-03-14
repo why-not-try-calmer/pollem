@@ -2,7 +2,6 @@
 {-# LANGUAGE DeriveGeneric   #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators   #-}
--- {-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 
 module Server
     ( startApp
@@ -63,7 +62,7 @@ server = submitPart :<|> submitCreate :<|> getPoll
         submitCreate :: SubmitCreateRequest -> Handler SubmitPartResponse
         submitCreate SubmitCreateRequest{} = return (SubmitPartResponse "Thanks for creating this poll.")
         getPoll :: Maybe String -> Handler GetPollResponse
-        getPoll (Just s) = return $ GetPollResponse "Thanks for asking. Here is your poll data." (Just (PollInitData "A question" ["some answers"] 42))
+        getPoll (Just s) = return $ GetPollResponse "Thanks for asking. Here is your poll data." $ Just (PollInitData "A question" ["some answers"] 42)
         getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
 app :: Application

@@ -24,6 +24,8 @@ dependencies:
 - servant-server
 - wai
 - warp
+- time
+- async
 
 library:
   source-dirs: src
