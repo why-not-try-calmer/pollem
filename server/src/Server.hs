@@ -19,16 +19,16 @@ import           Scheduler                   (schedule)
 import           Servant
 
 type API =
-    "submit_part_request" :> ReqBody '[JSON] SubmitPartRequest :> Post '[JSON] SubmitPartResponse :<|>
     "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
     "submit_close_request":> ReqBody '[JSON] SubmitCloseRequest :> Post '[JSON] SubmitPartResponse :<|>
-    "getpoll" :> QueryParam "id" String :> Get '[JSON] GetPollResponse
+    "getpoll" :> QueryParam "id" String :> Get '[JSON] GetPollResponse :<|>
+    "submit_part_request" :> ReqBody '[JSON] SubmitPartRequest :> Post '[JSON] SubmitPartResponse
 
 api :: Proxy API
 api = Proxy
 
 server :: Server API
-server = submitPart :<|> submitCreate :<|> submitClose :<|> getPoll
+server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart 
     where
         submitPart :: SubmitPartRequest -> Handler SubmitPartResponse
         submitPart SubmitPartRequest{} = return (SubmitPartResponse "Thanks for participating.")

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e3035b4b1be283f4406a1d0c6d7d1d078d9a2224be4eb5587c412c2582ddb1df
+-- hash: b188a94cdbeb268bd166a17e8a235aebbc4155904520c3f403e11c50592a861c
 
 name:           pollem
 version:        0.1.0.0
@@ -24,6 +24,7 @@ source-repository head
 
 library
   exposed-modules:
+      Mailer
       Requests
       Scheduler
       Server
@@ -36,6 +37,7 @@ library
     , async
     , base >=4.7 && <5
     , containers
+    , req
     , servant-server
     , text
     , time
@@ -57,6 +59,7 @@ executable server-exe
     , base
     , containers
     , pollem
+    , req
     , servant-server
     , text
     , time
@@ -82,6 +85,7 @@ test-suite server-test
     , hspec-wai
     , hspec-wai-json
     , pollem
+    , req
     , servant-server
     , text
     , time

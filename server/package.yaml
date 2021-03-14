@@ -29,6 +29,7 @@ dependencies:
 - text
 - containers
 - wai-cors
+- req
 
 library:
   source-dirs: src
