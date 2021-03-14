@@ -23,8 +23,8 @@
             },
             getPoll() {
                 return fetch(this.endpoint() + "/getpoll?id=79", {
-                    method: "GET",
-                }).then(resp => console.log(resp)).catch(err => console.error(err))
+                       method: "GET",
+                }).then(resp => console.log(JSON.stringify(resp))).catch(err => console.error(JSON.stringify(err)))
             }
         }
         function output(id, val) { document.getElementById(id).innerHTML = val }
