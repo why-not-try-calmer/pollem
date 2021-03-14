@@ -1,72 +1,55 @@
-{-# LANGUAGE DataKinds       #-}
-{-# LANGUAGE DeriveGeneric   #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeOperators   #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators     #-}
 
 module Server
     ( startApp
     , app
     ) where
 
-import           Data.Aeson
-import           Data.Aeson.TH
+import           Control.Concurrent.Async (async, cancel)
+import           Control.Monad.IO.Class   (liftIO)
+import qualified Data.Text                as T
+import qualified Data.Map   as M
 import           Network.Wai
+import Network.Wai.Middleware.Cors
 import           Network.Wai.Handler.Warp
+import           Requests
+import           Scheduler                (schedule)
 import           Servant
 
-data SubmitPartRequest = SubmitPartRequest {
-    part_clientId            :: Int,
-    part_clientFingerPrint :: String,
-    part_clientPollId      :: Int,
-    part_payload :: String
-} deriving (Eq, Show)
-$(deriveJSON defaultOptions ''SubmitPartRequest)
-
-data SubmitCreateRequest = SubmitCreateRequest {
-    create_clientId            :: Int,
-    create_clientFingerPrint :: String,
-    create_clientPollId      :: Int,
-    create_payload :: String
-}
-$(deriveJSON defaultOptions ''SubmitCreateRequest)
-
-newtype SubmitPartResponse = SubmitPartResponse { msg :: String } deriving (Eq, Show)
-$(deriveJSON defaultOptions ''SubmitPartResponse)
-
-data PollInitData = PollInitData {
-    question :: String,
-    options :: [String],
-    pollid :: Int
-} deriving (Eq, Show)
-$(deriveJSON defaultOptions ''PollInitData)
-
-data GetPollResponse = GetPollResponse {
-    get_poll_msg :: String,
-    get_poll_payload :: Maybe PollInitData
-} deriving (Eq, Show)
-$(deriveJSON defaultOptions ''GetPollResponse)
-    
-type API = 
+type API =
     "submit_part_request" :> ReqBody '[JSON] SubmitPartRequest :> Post '[JSON] SubmitPartResponse :<|>
     "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
-    "poll" :> QueryParam "id" String :> Get '[JSON] GetPollResponse
+    "submit_close_request":> ReqBody '[JSON] SubmitCloseRequest :> Post '[JSON] SubmitPartResponse :<|>
+    "getpoll" :> QueryParam "id" String :> Get '[JSON] GetPollResponse
 
 api :: Proxy API
 api = Proxy
 
 server :: Server API
-server = submitPart :<|> submitCreate :<|> getPoll
+server = submitPart :<|> submitCreate :<|> submitClose :<|> getPoll
     where
         submitPart :: SubmitPartRequest -> Handler SubmitPartResponse
         submitPart SubmitPartRequest{} = return (SubmitPartResponse "Thanks for participating.")
+
         submitCreate :: SubmitCreateRequest -> Handler SubmitPartResponse
-        submitCreate SubmitCreateRequest{} = return (SubmitPartResponse "Thanks for creating this poll.")
+        submitCreate (SubmitCreateRequest cid fp pid pay) = do
+            liftIO $ do
+                th <- async $ schedule . T.unpack $ pay
+                -- call `cancel` on th if you want to unschedule the event
+                return ()
+            return (SubmitPartResponse "Thanks for creating this poll.")
+
+        submitClose :: SubmitCloseRequest -> Handler SubmitPartResponse
+        submitClose SubmitCloseRequest{} = return (SubmitPartResponse "Thanks for creating this poll.")
+
         getPoll :: Maybe String -> Handler GetPollResponse
-        getPoll (Just s) = return $ GetPollResponse "Thanks for asking. Here is your poll data." $ Just (PollInitData "A question" ["some answers"] 42)
+        getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
         getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
 app :: Application
-app = serve api server
+app = simpleCors $ serve api server
 
 startApp :: IO ()
 startApp = run 8080 app

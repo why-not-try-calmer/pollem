@@ -26,6 +26,9 @@ dependencies:
 - warp
 - time
 - async
+- text
+- containers
+- wai-cors
 
 library:
   source-dirs: src
