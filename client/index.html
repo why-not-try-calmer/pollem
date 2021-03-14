@@ -4,32 +4,31 @@
 <head>
     <meta charset="utf-8" />
     <script>
-        const ERRORS = {
+        const Errors = {
             taken: "Sorry but you appear to have taken the survey already.",
             noLocalStorage: "localStorage API not supported",
             noCookieSet: "Sorry but you appear to have cleared your cookies"
         }
-        const requests = {
-            endpoint() { return "http://localhost:8080" },
+        const Requests = {
+            endpoint: {
+                test: "http://localhost:8080",
+            },
             createPoll() {
-                return fetch(this.endpoint() + "/submit_create_request", {
+                return fetch(this.endpoint.test + "/submit_create_request", {
                     method: "POST",
-                    headers: {
-                        "Accept": "application/json",
-                        "Content-type": "application/json"
-                    },
-                    body: JSON.stringify({"create_clientId":30, "create_clientFingerPrint": "Adrien", "create_clientPollId": 21, "create_payload": "2021-03-14T14:51:14+01:00"}),
+                    headers: { "Accept": "application/json", "Content-type": "application/json" },
+                    body: JSON.stringify({ "create_clientId": 30, "create_clientFingerPrint": "Adrien", "create_clientPollId": 21, "create_payload": "2021-03-14T14:51:14+01:00" }),
                 })
             },
-            getPoll() {
-                return fetch(this.endpoint() + "/getpoll?id=79", {
-                       method: "GET",
-                }).then(resp => console.log(JSON.stringify(resp))).catch(err => console.error(JSON.stringify(err)))
+            getPoll(id = 42) {
+                return fetch(this.endpoint.test + "/getpoll?id=" + id.toString, { method: "GET" })
+                    .then(resp => console.log(JSON.stringify(resp)))
+                    .catch(err => console.error(JSON.stringify(err)))
             }
         }
         function output(id, val) { document.getElementById(id).innerHTML = val }
         function initLocalStorage(fingerprint) {
-            if (!localStorage) { 
+            if (!localStorage) {
                 output("errors", ERRORS.noLocalStorage);
                 return;
             }
@@ -68,7 +67,7 @@
     <p>User state:
     <div id="user_state"></div>
     </p>
-    <button onclick="requests.getPoll()">Get poll</button>
+    <button onclick="Requests.getPoll()">Get poll</button>
 </body>
 <script async src="//cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js" onload="main()"></script>
 

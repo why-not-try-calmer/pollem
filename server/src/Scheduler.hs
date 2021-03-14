@@ -34,7 +34,7 @@ schedule s = case isoOrCustom s of
             secs = fst . properFraction . nominalDiffTimeToSeconds $ diff
             micros = secs * 1000000
         in  if secs <= 0 then print "Error, cannot schedule past events."
-            else do 
+            else do
                 print $ "Scheduled for in " ++ show secs ++ " seconds"
                 threadDelay micros
                 print "Finished."

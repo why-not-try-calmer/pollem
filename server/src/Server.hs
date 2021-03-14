@@ -7,15 +7,15 @@ module Server
     , app
     ) where
 
-import           Control.Concurrent.Async (async, cancel)
-import           Control.Monad.IO.Class   (liftIO)
-import qualified Data.Text                as T
-import qualified Data.Map   as M
+import           Control.Concurrent.Async    (async, cancel)
+import           Control.Monad.IO.Class      (liftIO)
+import qualified Data.Map                    as M
+import qualified Data.Text                   as T
 import           Network.Wai
-import Network.Wai.Middleware.Cors
 import           Network.Wai.Handler.Warp
+import           Network.Wai.Middleware.Cors
 import           Requests
-import           Scheduler                (schedule)
+import           Scheduler                   (schedule)
 import           Servant
 
 type API =
