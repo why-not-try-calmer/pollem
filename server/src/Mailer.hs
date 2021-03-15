@@ -1,5 +1,8 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE LambdaCase   #-}
 
 module Mailer where
 
@@ -8,53 +11,72 @@ import           Data.Aeson
 import           Data.Aeson.TH
 import qualified Data.Text              as T
 import           Network.HTTP.Req
+import Control.Exception (try, SomeException)
 
-data From = From {
-    from_email :: T.Text,
-    from_name  :: T.Text
+data Content = Content {
+   _type  :: T.Text ,
+   _value :: T.Text
 }
-$(deriveJSON defaultOptions ''From)
+-- $(deriveJSON defaultOptions ''Content)
 
-data ReplyTo = ReplyTo {
-    reply_email :: T.Text,
-    reply_name  :: T.Text
+instance ToJSON Content where
+   toJSON Content{..} =
+      object [
+      "type" .= _type,
+      "value" .= _value
+      ]
+
+data Addressee = Addressee {
+   email :: T.Text,
+   name  :: T.Text
 }
-$(deriveJSON defaultOptions ''ReplyTo)
+$(deriveJSON defaultOptions ''Addressee)
 
-newtype Content = Content { content :: [T.Text ] }
-$(deriveJSON defaultOptions ''Content)
-
-data EmailData = EmailData {
-    _from     :: From,
-    _reply_to :: ReplyTo,
-    _subject  :: T.Text
+data DynamicTemplate = DynamicTemplate {
+   verb             ::  T.Text,
+   adjective        :: T.Text ,
+   noun             :: T.Text,
+   currentDayOfWeek :: T.Text
 }
-$(deriveJSON defaultOptions ''EmailData)
+$(deriveJSON defaultOptions ''DynamicTemplate)
 
-newtype Personalization = Personalization { personalization :: [T.Text] }
-$(deriveJSON defaultOptions ''Personalization)
-
-newtype EmailBody = EmailBody {
-    _personalizations :: [Personalization]
+data PersoObject = PersoObject {
+   to      :: [Addressee],
+   -- dynamic_template_data :: DynamicTemplate,
+   subject :: T.Text
 }
-$(deriveJSON defaultOptions ''EmailBody)
+$(deriveJSON defaultOptions ''PersoObject)
 
 data Email = Email {
-    email_url    :: T.Text,
-    email_header :: T.Text,
-    email_data   :: EmailData
+   from             :: Addressee,
+   reply_to         :: Addressee,
+   personalizations :: [PersoObject],
+   content          :: [Content]
 }
-$(deriveJSON defaultOptions ''Email)
+-- $(deriveJSON defaultOptions ''Email)
+
+instance ToJSON Email where
+   toJSON Email{..} = object [
+      "from" .= from,
+      "reply_to" .= reply_to,
+      "personalizations" .= personalizations,
+      "content" .= content
+      ]
 
 sendEmail :: IO ()
 sendEmail = runReq defaultHttpConfig $ do
-    let h = oAuth2Bearer "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"
-        d = "{'personalizations':[{'to':[{'email':'adrien.glauser@gmail.com','name':'John Doe'}],'subject':'Hello, World!'}],'from':{'email':'mrnycticorax@gmail.com','name':'Géraud Lernais'},'reply_to':{'email':'mrnycticorax@gmail.com','name':'géraud Lernais'}}" :: T.Text
-    v <- req POST (https "https://api.sendgrid.com/v3/mail/send" /: "post" ) (ReqBodyJson d) jsonResponse h
-    liftIO $ print (responseBody v :: Value)
+    let email_header = oAuth2Bearer "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"
+        content = Content "text/plain" "ca ne va pas se passer comme ca!"
+        sender = Addressee "mrnycticorax@gmail.com" "Geraud Lernais"
+        addressee = Addressee "adrien.glauser@gmail.com" "Adrien Glauser"
+        -- dyn_templ = DynamicTemplate "" "" "" ""
+        personalization = PersoObject [addressee] "Mille sabords!"
+        email = Email sender addressee [personalization] [content]
+    liftIO . print $ encode email
+    resp <- req POST (https "api.sendgrid.com" /: "v3" /: "mail" /: "send" ) (ReqBodyJson email) jsonResponse email_header
+    liftIO $ print (responseBody resp :: Value)
 
 main = sendEmail
-
 
 {-
 
