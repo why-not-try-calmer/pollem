@@ -1,14 +1,18 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports    #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeOperators     #-}
 
 module AppData where
 
+import           "cryptonite" Crypto.Random
 import           Data.Aeson
 import           Data.Aeson.TH
-import qualified Data.Map      as M
-import qualified Data.Text     as T
+import qualified Data.ByteString            as B
+import qualified Data.Map                   as M
+import qualified Data.Text                  as T
+import           Data.Text.Encoding
 
 data Poll = Poll {
     poll_startDate     :: T.Text,
@@ -65,3 +69,11 @@ initPoll = Just Poll {
         poll_answers = M.fromList [("1", "First")],
         poll_other_answers = Just . M.fromList $ [("opt1", "First optional")]
     }
+
+random :: Int -> IO B.ByteString
+random size =  do
+    drg <- getSystemDRG
+    let (bytes, _) = randomBytesGenerate size drg
+    return bytes
+
+main = random 16 >>= print . decodeUtf16BE
