@@ -3,7 +3,7 @@
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeOperators     #-}
 
-module Requests where
+module AppData where
 
 import           Data.Aeson
 import           Data.Aeson.TH

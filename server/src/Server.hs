@@ -14,7 +14,7 @@ import qualified Data.Text                   as T
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
-import           Requests
+import           AppData
 import           Scheduler                   (schedule)
 import           Servant
 
