@@ -17,6 +17,7 @@ import           Network.Wai.Middleware.Cors
 import           AppData
 import           Scheduler                   (schedule)
 import           Servant
+import Control.Monad.State (StateT (runStateT))
 
 type API =
     "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
@@ -27,8 +28,8 @@ type API =
 api :: Proxy API
 api = Proxy
 
-server :: Server API
-server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart 
+server :: LastGen -> Server API
+server lg = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart 
     where
         submitPart :: SubmitPartRequest -> Handler SubmitPartResponse
         submitPart SubmitPartRequest{} = return (SubmitPartResponse "Thanks for participating.")
@@ -48,8 +49,10 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart
         getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
         getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
-app :: Application
-app = simpleCors $ serve api server
+app :: LastGen -> Application
+app s = simpleCors $ serve api (server s)
 
 startApp :: IO ()
-startApp = run 8080 app
+startApp = do
+    state <- initState  
+    run 8080 (app state)
