@@ -6,6 +6,7 @@
 
 module AppData where
 
+import           Crypto.Number.Generate
 import           "cryptonite" Crypto.Random
 import           Data.Aeson
 import           Data.Aeson.TH
@@ -13,6 +14,7 @@ import qualified Data.ByteString            as B
 import qualified Data.Map                   as M
 import qualified Data.Text                  as T
 import           Data.Text.Encoding
+import Data.Word (Word8)
 
 data Poll = Poll {
     poll_startDate     :: T.Text,
@@ -70,10 +72,16 @@ initPoll = Just Poll {
         poll_other_answers = Just . M.fromList $ [("opt1", "First optional")]
     }
 
-random :: Int -> IO B.ByteString
-random size =  do
+createToken :: IO T.Text
+createToken =  do
     drg <- getSystemDRG
-    let (bytes, _) = randomBytesGenerate size drg
-    return bytes
+    let (bytes, _) = randomBytesGenerate 16 drg
+    return (T.replace "1" "-" . decodeUtf16BE $ bytes)
 
-main = random 16 >>= print . decodeUtf16BE
+createNumber :: IO Integer
+createNumber = generateBetween 1 100000000
+
+main = do
+    token <- createToken
+    randomNumber <- createNumber
+    print (token, randomNumber)
