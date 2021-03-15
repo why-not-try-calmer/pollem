@@ -33,6 +33,7 @@ dependencies:
 - hedis
 - cryptonite
 - bytestring
+- mtl
 
 library:
   source-dirs: src

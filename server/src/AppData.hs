@@ -15,6 +15,8 @@ import qualified Data.Map                   as M
 import qualified Data.Text                  as T
 import           Data.Text.Encoding
 import Data.Word (Word8)
+import Control.Concurrent (MVar)
+import Control.Concurrent.MVar
 
 data Poll = Poll {
     poll_startDate     :: T.Text,
@@ -72,16 +74,17 @@ initPoll = Just Poll {
         poll_other_answers = Just . M.fromList $ [("opt1", "First optional")]
     }
 
-createToken :: IO T.Text
-createToken =  do
-    drg <- getSystemDRG
+createToken :: SystemDRG -> IO T.Text
+createToken drg = do
     let (bytes, _) = randomBytesGenerate 16 drg
-    return (T.replace "1" "-" . decodeUtf16BE $ bytes)
+    return $ decodeUtf16BE bytes
 
 createNumber :: IO Integer
 createNumber = generateBetween 1 100000000
 
-main = do
-    token <- createToken
-    randomNumber <- createNumber
-    print (token, randomNumber)
+type LastGen = MVar (Integer, SystemDRG)
+
+initState :: IO LastGen
+initState = do
+    drg <- getSystemDRG
+    newMVar (0, drg)
