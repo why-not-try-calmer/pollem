@@ -29,33 +29,35 @@ api :: Proxy API
 api = Proxy
 
 server :: State -> Server API
-server state = submitCreate :<|> submitClose :<|> getPoll state :<|> submitPart 
+server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart
     where
         submitPart :: SubmitPartRequest -> Handler SubmitPartResponse
         submitPart SubmitPartRequest{} = return (SubmitPartResponse "Thanks for participating.")
 
-        submitCreate :: SubmitCreateRequest -> Handler SubmitPartResponse
-        submitCreate (SubmitCreateRequest cid fp pid pay) = do
+        submitCreate :: State -> SubmitCreateRequest -> Handler SubmitPartResponse
+        submitCreate mvar (SubmitCreateRequest cid fp pid pay) = do
             liftIO $ do
+                (v, g) <- takeMVar mvar
+                -- printing current stat left value
+                print v
+                -- incrementing left value with 'last number'; replacing into state
+                putMVar mvar (v+1, g)
+                -- scheduling worker runtime thread to prepare callback upon time limit reached
                 th <- async $ schedule . T.unpack $ pay
                 -- call `cancel` on th if you want to unschedule the event
+                -- cancel th
                 return ()
             return (SubmitPartResponse "Thanks for creating this poll.")
 
         submitClose :: SubmitCloseRequest -> Handler SubmitPartResponse
         submitClose SubmitCloseRequest{} = return (SubmitPartResponse "Thanks for creating this poll.")
 
-        getPoll :: State -> Maybe String -> Handler GetPollResponse
-        getPoll mvar (Just i) = do
-            liftIO $ do
-                (v, g) <- takeMVar mvar
-                print v
-                putMVar mvar (v+1, g)
-            return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
-        getPoll _ Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
+        getPoll :: Maybe String -> Handler GetPollResponse
+        getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
+        getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
 app :: State -> Application
-app s = simpleCors $ serve api (server s)
+app s = simpleCors (serve api . server $ s)
 
 startApp :: IO ()
 startApp = do

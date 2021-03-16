@@ -1,11 +1,14 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports    #-}
+{-# LANGUAGE StrictData        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeOperators     #-}
 
 module AppData where
 
+import           Control.Concurrent         (MVar)
+import           Control.Concurrent.MVar
 import           Crypto.Number.Generate
 import           "cryptonite" Crypto.Random
 import           Data.Aeson
@@ -14,9 +17,7 @@ import qualified Data.ByteString            as B
 import qualified Data.Map                   as M
 import qualified Data.Text                  as T
 import           Data.Text.Encoding
-import Data.Word (Word8)
-import Control.Concurrent (MVar)
-import Control.Concurrent.MVar
+import           Data.Word                  (Word8)
 
 data Poll = Poll {
     poll_startDate     :: T.Text,
