@@ -62,19 +62,20 @@ instance ToJSON Email where
       "personalizations" .= personalizations,
       "content" .= content
       ]
-
+      
 sendEmail :: IO ()
 sendEmail = runReq defaultHttpConfig $ do
-    let email_header = oAuth2Bearer "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"
-        content = Content "text/plain" "ca ne va pas se passer comme ca!"
+    let email_header = oAuth2Bearer "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"
+        content = Content "text/plain" "Ca ne va pas se passer comme ca!"
         sender = Addressee "mrnycticorax@gmail.com" "Geraud Lernais"
         addressee = Addressee "adrien.glauser@gmail.com" "Adrien Glauser"
         -- dyn_templ = DynamicTemplate "" "" "" ""
         personalization = PersoObject [addressee] "Mille sabords!"
         email = Email sender addressee [personalization] [content]
     liftIO . print $ encode email
-    resp <- req POST (https "api.sendgrid.com" /: "v3" /: "mail" /: "send" ) (ReqBodyJson email) jsonResponse email_header
-    liftIO $ print (responseBody resp :: Value)
+    resp <- req POST (https "api.sendgrid.com" /: "v3" /: "mail" /: "send" ) (ReqBodyJson email) bsResponse  email_header
+    -- liftIO $ print (responseBody resp :: Value)
+    liftIO $ print (responseBody resp)
 
 main = sendEmail
 
