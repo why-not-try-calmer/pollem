@@ -10,6 +10,7 @@ import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad (void)
 import qualified Data.ByteString as B
 import           Data.Aeson
+import Data.Aeson.Extra (encodeStrict)
 import qualified Data.Text as T
 
 connDo action = withConnect openConnection (`runRedis` action) 
@@ -29,7 +30,7 @@ createIfExist poll pid = exists ("poll:" `B.append` pid) >>= \case
     Right verdict -> 
         if verdict then liftIO . print $ "already exist"
         else do
-            set pid (encode poll) 
+            set pid (encodeStrict poll) 
             liftIO . print $ "added"
                         
 main = case initPoll of 
