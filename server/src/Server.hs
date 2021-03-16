@@ -17,7 +17,7 @@ import           Network.Wai.Middleware.Cors
 import           AppData
 import           Scheduler                   (schedule)
 import           Servant
-import Control.Monad.State (StateT (runStateT))
+import Control.Concurrent (takeMVar, putMVar)
 
 type API =
     "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
@@ -28,8 +28,8 @@ type API =
 api :: Proxy API
 api = Proxy
 
-server :: LastGen -> Server API
-server lg = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart 
+server :: State -> Server API
+server state = submitCreate :<|> submitClose :<|> getPoll state :<|> submitPart 
     where
         submitPart :: SubmitPartRequest -> Handler SubmitPartResponse
         submitPart SubmitPartRequest{} = return (SubmitPartResponse "Thanks for participating.")
@@ -45,11 +45,16 @@ server lg = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart
         submitClose :: SubmitCloseRequest -> Handler SubmitPartResponse
         submitClose SubmitCloseRequest{} = return (SubmitPartResponse "Thanks for creating this poll.")
 
-        getPoll :: Maybe String -> Handler GetPollResponse
-        getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
-        getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
+        getPoll :: State -> Maybe String -> Handler GetPollResponse
+        getPoll mvar (Just i) = do
+            liftIO $ do
+                (v, g) <- takeMVar mvar
+                print v
+                putMVar mvar (v+1, g)
+            return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
+        getPoll _ Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
-app :: LastGen -> Application
+app :: State -> Application
 app s = simpleCors $ serve api (server s)
 
 startApp :: IO ()

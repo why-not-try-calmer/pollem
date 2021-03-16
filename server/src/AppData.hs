@@ -82,9 +82,9 @@ createToken drg = do
 createNumber :: IO Integer
 createNumber = generateBetween 1 100000000
 
-type LastGen = MVar (Integer, SystemDRG)
+type State = MVar (Integer, SystemDRG)
 
-initState :: IO LastGen
+initState :: IO State
 initState = do
     drg <- getSystemDRG
     newMVar (0, drg)
