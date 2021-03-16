@@ -65,7 +65,7 @@ instance ToJSON Email where
 
 sendEmail :: IO ()
 sendEmail = runReq defaultHttpConfig $ do
-    let email_header = oAuth2Bearer "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"
+    let email_header = oAuth2Bearer "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"
         content = Content "text/plain" "ca ne va pas se passer comme ca!"
         sender = Addressee "mrnycticorax@gmail.com" "Geraud Lernais"
         addressee = Addressee "adrien.glauser@gmail.com" "Adrien Glauser"
