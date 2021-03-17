@@ -50,7 +50,7 @@
                 })
                     .then(resp => {
                         let parsed_resp = JSON.parse(resp)
-                        if (parsed_resp.token && parsed_resp.hash) {
+                        if (parsed_resp.hash) {
                             let user_storage = Storage.get();
                             user_storage.hash = parsed_resp.hash;
                             Storage.set(user_storage);
