@@ -1,15 +1,26 @@
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module AppErrors where
 
-data ErrorType = BadEmail | PollExists | PollNotExist | PollIncomplete
+import qualified Data.Text as T
 
-instance Show ErrorType where
-    show BadEmail = "Invalid email."
-    show PollExists = "Poll exists already."
-    show PollNotExist = "Poll does not or no longer exists. Please correct your input."
-    show PollIncomplete = "Poll is incomplete. Please correct your input."
+
+data ErrorT = BadEmail | PollExists | PollNotExist | PollIncomplete | PollTakenAlready
+
+data Error a = Error !ErrorT a
+
+toText :: Show a => a -> T.Text -> T.Text
+toText v s = T.append s . T.pack . show $ s
+
+encodeError :: (Show a) => Error a -> T.Text
+encodeError (Error BadEmail v) = toText v "This email is not formmated property: "
+encodeError (Error PollExists v) = toText v "This poll exists already: "
+encodeError (Error PollNotExist v) = toText v "This poll does not exist (anymore): "
+encodeError (Error PollIncomplete v) = toText v "Your input is not complete, please complete it."
+encodeError (Error PollTakenAlready v) =  toText v "You've taken this poll already. You cannot take the same poll more than once."
 
 main = do
-    let err = BadEmail
+    let err = Error BadEmail ("adrien" :: String)
     case err of
-        BadEmail -> print err
-        PollExists -> print err
+        Error BadEmail msg -> print msg
