@@ -49,7 +49,7 @@ server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart 
                 -- call `cancel` on th if you want to unschedule the event
                 -- cancel th
                 return ()
-            return (SubmitPartResponse "Thanks for creating this poll.")
+            return (SubmitPartResponse "Thanks for creating this poll. Before we can make it happen, please verify your email using the link sent there.")
 
         submitClose :: SubmitCloseRequest -> Handler SubmitPartResponse
         submitClose SubmitCloseRequest{} = return (SubmitPartResponse "Thanks for creating this poll.")

@@ -35,7 +35,6 @@ dependencies:
 - cryptonite
 - bytestring
 - memory
-- mtl
 
 library:
   source-dirs: src

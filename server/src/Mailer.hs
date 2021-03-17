@@ -9,11 +9,13 @@
 
 module Mailer where
 
-import AppData
+import           AppData
+import           Control.Concurrent     (putMVar, takeMVar)
 import           Control.Monad.IO.Class
 import           Data.Aeson
 import           Data.Aeson.TH
 import qualified Data.Text              as T
+import           Data.Text.Encoding     (decodeUtf8)
 import           Network.HTTP.Req
 
 data Content = Content {
@@ -69,16 +71,16 @@ instance ToJSON Email where
 type Header = Option 'Https
 
 data SendGridEmail = SendGridEmail {
-   header :: Header,
+   header  :: Header,
    payload :: Email
-} 
+}
 
 makeSendGridEmail :: VerificationPayload -> SendGridEmail
 makeSendGridEmail (VerificationPayload link email) =
    let   email_header = oAuth2Bearer "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"
          content = Content "text/plain" $ "Click the following link to verify against this survey: " `T.append` link
          sender = Addressee "mrnycticorax@gmail.com" "MrNycticorax"
-         addressee = Addressee email "Undisclosed Recipient" 
+         addressee = Addressee email "Undisclosed Recipient"
          personalization = PersoObject [addressee] "Mille sabords!"
    in    SendGridEmail email_header $ Email sender addressee [personalization] [content]
 
@@ -88,6 +90,12 @@ sendEmail (SendGridEmail header email) = runReq defaultHttpConfig $ do
     liftIO . print $ responseBody resp
 
 main :: IO ()
-main = 
-   let   payload = VerificationPayload "https://xx.xxx.org/verify_email?token=sdsdsdsds" "adrien.glauser@gmail.com"
-   in    sendEmail $ makeSendGridEmail payload
+main = do
+   let   (email_bs, email_txt) = ("adrien.glauser@gmail.com","adrien.glauser@gmail.com")
+   mvar <- initState
+   (val, gen) <- takeMVar mvar
+   token <- createToken gen email_bs
+   putMVar mvar (val, gen)
+   let   appendDec h t = h `T.append` decodeUtf8 t
+         payload = VerificationPayload ("domain dom / verify_email?token=" `appendDec` token) email_txt
+   sendEmail $ makeSendGridEmail payload

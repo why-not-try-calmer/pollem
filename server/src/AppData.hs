@@ -100,8 +100,6 @@ createToken drg salt = do
     return token
     where
         randomBytes = flip randomBytesGenerate
-        createNumber :: IO Integer
-        createNumber = generateBetween 1 100000000
 
-
-
+createPollId :: IO Integer
+createPollId = generateBetween 1 100000000
