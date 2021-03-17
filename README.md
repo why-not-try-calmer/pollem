@@ -22,7 +22,7 @@ email:<cryptohashed user_email>
     verified: False
 ```
 3. Finally the server sends: 
-* a response to the client containing both `cryptohashed email` and `token` set to their appropriate values. 
+* a response to the client containing `cryptohashed email` set to the appropriate value. 
 * an email at `user_email` with a `token` parameter set to the value of the actual token
 
 Javascript saves `cryptohashed email` to a variable (not to localStorage). When the user clicks _Confirm token_, Javascript completes the request so that both `token` & `cryptohashed email` are passed.
