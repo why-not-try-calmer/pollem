@@ -2,7 +2,7 @@
 ## How it works
 ### Landing (route: /)
 User lands on website. Javascript takes a fingerprint and stores it in the `pollem` localStorage web client object. It also checks that object for a user token. If a token is found, the user is considered authenticated. They have access to the form creation form. If not, they have access to the _Authenticate_ button, which they can use to request a token.
-### Getting a user token, /
+### Getting a user token (route: /)
 Clicking the button _Authenticate_ checks if the _Email_ field nearby is set, check if it's a valid email address, and `POST` it to the server. The server expects:
 ```
 {
