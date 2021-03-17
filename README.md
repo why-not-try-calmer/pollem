@@ -1,10 +1,7 @@
 # pollem
-
 ## How it works
-
 ### Landing (route: /)
-User lands on website. Javascript takes a fingerprint and stores it in the `pollem` localStorage objet. It also checks that object for a user token. If a token is found, the user is considered authenticated. They have access to the form creation form. If not, they have access to the _Authenticate_ button, which they can use to request a token.
-
+User lands on website. Javascript takes a fingerprint and stores it in the `pollem` localStorage object. It also checks that object for a user token. If a token is found, the user is considered authenticated. They have access to the form creation form. If not, they have access to the _Authenticate_ button, which they can use to request a token.
 ### Exchanging a user token (route: /)
 Clicking the button _Authenticate_ checks if the _Email_ field nearby is set, check if it's a valid email address, and `POST` it to the server. The server expects:
 ```
@@ -31,9 +28,9 @@ Javascript saves `cryptohashed email` to a variable. When the user clicks _Confi
 email:<cryptohashed user_email>
     fingerprint: <fingerprint>
     token: <token>
-    status: "verified"
+    verified: false
 ```
-and responds with _Verified__. Javascript finally saves `user_hash` to localStorage, which now looks:
+and responds with _Verified_. Javascript finally saves `user_hash` to localStorage, which now looks:
 ```
 {
     user_fingerprint : ...
@@ -54,8 +51,47 @@ Clicking the button _Submit poll_ sends a request which the server expects to be
     poll_answers                 :: M.Map T.Text T.Text,
     poll_other_answers           :: Maybe (M.Map T.Text T.Text),
     poll_requires_verified_email :: Bool,
-    poll_creator_fingerprint     :: T.Text,
-    poll_creator_token           :: T.Text
+    poll_user_hash               :: T.Text
 }
 ```
-2. The server 
+If `user_hash` exists, and the payload is valid, the server generates a random number as `poll_id` and saves a database representation:
+```
+poll:<poll_id>
+    recipe -- the above as a single JSON string
+    startDate -- string
+    isActive -- boolean
+    authenticatedOnly -- boolean
+    participants -- set of fingerprints if not authenticateOnly, of user_emails otherwise
+    results -- list of int ordered as the questions, initialized to 0
+```
+Else it responds with the appropriate error message.
+### Displaying a poll (route: /getpoll)
+No authentication of verification is performed. The server checks if `poll_id` passed as `GET` parameter exists. If it does it returns the entire poll. If not it returns an error message.
+### Participating to poll (route: /submit_part_request)
+When the user submits his choices, one of the following objects is sent:
+```
+{
+    poll_id: ...
+    user_fingerprint: ...
+    user_email: ...
+    answers: list of bool with true for ticked choice and false otherwise
+}
+```
+or
+```
+{
+    poll_id: ...
+    user_fingerprint: ...
+    answers: list of bool with true for ticked choice and false otherwise
+}
+```
+The server patterns match on the payload, determining which type it is dealing with. It checks the database for `poll:<poll_id>`. Returns error if:
+* the `poll_id` does not exist
+* the poll is not longer active
+* the poll is set to `authenticateOnly` and one of the following obtains:
+    * the payload does not have an `user_email` field; or 
+    * the value of this field does not exist under `email:<cryptohashed user_email>`; or
+    * the user's `verified` field is not set to `True`
+    * `user_email` is in the `participants` set
+* the poll is not set to `authenticateOnly` and `user_fingerprint` is in the `participants` set
+Otherwise the server traverses the list of int and increment whenever the index matches the index of an answer whose value is `True`. It responds with "Thanks for participating!".
