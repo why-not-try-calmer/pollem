@@ -1,19 +1,19 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-} -- needed for either monad in hedis function signatures
 
 module Database where
 
-import AppData
-import Database.Redis
-import Control.Monad.IO.Class (liftIO, MonadIO)
-import Control.Monad (void)
-import qualified Data.ByteString as B
+import           AppData
+import           Control.Monad          (void)
+import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson
-import Data.Aeson.Extra (encodeStrict)
-import qualified Data.Text as T
+import           Data.Aeson.Extra       (encodeStrict)
+import qualified Data.ByteString        as B
+import qualified Data.Text              as T
+import           Database.Redis
 
-connDo action = withConnect openConnection (`runRedis` action) 
+connDo action = withConnect openConnection (`runRedis` action)
 
 _connDo action = void $ withConnect openConnection (`runRedis` action)
 
@@ -27,12 +27,12 @@ openConnection = defaultConnectInfo {
 createIfExist :: (RedisCtx m (Either a), MonadIO m) => Poll -> B.ByteString -> m ()
 createIfExist poll pid = exists ("poll:" `B.append` pid) >>= \case
     Left s -> liftIO . print $ "Sorry, an error occurred"
-    Right verdict -> 
+    Right verdict ->
         if verdict then liftIO . print $ "already exist"
         else do
-            set pid (encodeStrict poll) 
+            set pid (encodeStrict poll)
             liftIO . print $ "added"
-                        
-main = case initPoll of 
+
+main = case initPoll of
     Just poll -> _connDo $ createIfExist poll "adrien"
-    Nothing -> print "That's not really a poll you"
+    Nothing   -> print "That's not really a poll you"

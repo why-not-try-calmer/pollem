@@ -7,6 +7,8 @@ module Server
     , app
     ) where
 
+import           AppData
+import           Control.Concurrent          (putMVar, takeMVar)
 import           Control.Concurrent.Async    (async, cancel)
 import           Control.Monad.IO.Class      (liftIO)
 import qualified Data.Map                    as M
@@ -14,10 +16,8 @@ import qualified Data.Text                   as T
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
-import           AppData
 import           Scheduler                   (schedule)
 import           Servant
-import Control.Concurrent (takeMVar, putMVar)
 
 type API =
     "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
@@ -61,5 +61,5 @@ app s = simpleCors (serve api . server $ s)
 
 startApp :: IO ()
 startApp = do
-    state <- initState  
+    state <- initState
     run 8080 (app state)

@@ -1,17 +1,17 @@
 {-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE LambdaCase   #-}
 
 module Mailer where
 
+import           Control.Exception      (SomeException, try)
 import           Control.Monad.IO.Class
 import           Data.Aeson
 import           Data.Aeson.TH
 import qualified Data.Text              as T
 import           Network.HTTP.Req
-import Control.Exception (try, SomeException)
 
 data Content = Content {
    _type  :: T.Text ,
@@ -62,7 +62,7 @@ instance ToJSON Email where
       "personalizations" .= personalizations,
       "content" .= content
       ]
-      
+
 sendEmail :: IO ()
 sendEmail = runReq defaultHttpConfig $ do
     let email_header = oAuth2Bearer "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"
@@ -78,36 +78,3 @@ sendEmail = runReq defaultHttpConfig $ do
     liftIO $ print (responseBody resp)
 
 main = sendEmail
-
-{-
-
-{
-   "personalizations":[
-      {
-         "to":[
-            {
-               "email":"john.doe@example.com",
-               "name":"John Doe"
-            }
-         ],
-         "dynamic_template_data":{
-            "verb":"",
-            "adjective":"",
-            "noun":"",
-            "currentDayofWeek":""
-         },
-         "subject":"Hello, World!"
-      }
-   ],
-   "from":{
-      "email":"noreply@johndoe.com",
-      "name":"John Doe"
-   },
-   "reply_to":{
-      "email":"noreply@johndoe.com",
-      "name":"John Doe"
-   },
-   "template_id":"<<YOUR_TEMPLATE_ID>>"
-}
-
--}
