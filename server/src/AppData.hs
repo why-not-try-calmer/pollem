@@ -63,6 +63,11 @@ data GetPollResponse = GetPollResponse {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''GetPollResponse)
 
+data VerificationPayload = VerificationPayload {
+    verify_link :: T.Text,
+    verify_email :: T.Text
+}
+
 newtype VerificationResponse = VerificationResponse T.Text
 $(deriveJSON defaultOptions ''VerificationResponse)
 

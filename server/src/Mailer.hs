@@ -9,6 +9,7 @@
 
 module Mailer where
 
+import AppData
 import           Control.Monad.IO.Class
 import           Data.Aeson
 import           Data.Aeson.TH
@@ -67,19 +68,26 @@ instance ToJSON Email where
 
 type Header = Option 'Https
 
-makeSendGridEmail :: (Header, Email)
-makeSendGridEmail =
-   let   email_header = oAuth2Bearer "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"
-         content = Content "text/plain" "Ca ne va pas se passer comme ca!"
-         sender = Addressee "mrnycticorax@gmail.com" "Geraud Lernais"
-         addressee = Addressee "adrien.glauser@gmail.com" "Adrien Glauser"
-         personalization = PersoObject [addressee] "Mille sabords!"
-   in (email_header, Email sender addressee [personalization] [content])
+data SendGridEmail = SendGridEmail {
+   header :: Header,
+   payload :: Email
+} 
 
-sendEmail :: (Header, Email) -> IO ()
-sendEmail (header, email) = runReq defaultHttpConfig $ do
+makeSendGridEmail :: VerificationPayload -> SendGridEmail
+makeSendGridEmail (VerificationPayload link email) =
+   let   email_header = oAuth2Bearer "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"
+         content = Content "text/plain" $ "Click the following link to verify against this survey: " `T.append` link
+         sender = Addressee "mrnycticorax@gmail.com" "MrNycticorax"
+         addressee = Addressee email "Undisclosed Recipient" 
+         personalization = PersoObject [addressee] "Mille sabords!"
+   in    SendGridEmail email_header $ Email sender addressee [personalization] [content]
+
+sendEmail :: SendGridEmail -> IO ()
+sendEmail (SendGridEmail header email) = runReq defaultHttpConfig $ do
     resp <- req POST (https "api.sendgrid.com" /: "v3" /: "mail" /: "send" ) (ReqBodyJson email) bsResponse header
-    liftIO $ print (responseBody resp)
+    liftIO . print $ responseBody resp
 
 main :: IO ()
-main = sendEmail makeSendGridEmail
+main = 
+   let   payload = VerificationPayload "https://xx.xxx.org/verify_email?token=sdsdsdsds" "adrien.glauser@gmail.com"
+   in    sendEmail $ makeSendGridEmail payload
