@@ -1,8 +1,8 @@
 # pollem
 ## How it works
-### Landing (route: /)
+### Landing, /
 User lands on website. Javascript takes a fingerprint and stores it in the `pollem` localStorage object. It also checks that object for a user token. If a token is found, the user is considered authenticated. They have access to the form creation form. If not, they have access to the _Authenticate_ button, which they can use to request a token.
-### Exchanging a user token (route: /)
+### Exchanging a user token, /
 Clicking the button _Authenticate_ checks if the _Email_ field nearby is set, check if it's a valid email address, and `POST` it to the server. The server expects:
 ```
 {
@@ -22,7 +22,7 @@ Finally the server sends:
 * a response to the client containing both `cryptohashed email` and `token` set to their appropriate values. 
 Javascript saves `cryptohashed email` to a variable. When the user clicks _Confirm token_, Javascript completes the request so that both `token` & `user_hash` are passed.
 
-### Verifying (route : verify_email)
+### Verifying, /verify_email
 `POST` request called from the user's client when they click the _Confirm token_ button. The server checks that `<token>` passed a parameter matches the token under `email:<cryptohashed user_email> token`. If no match, responds with _Error bad token_. Else sets database to
 ```
 email:<cryptohashed user_email>
@@ -37,7 +37,7 @@ and responds with _Verified_. Javascript finally saves `user_hash` to localStora
     user_hash : ...
 }
 ```
-### Create a poll_answers (route: submit_create_request)
+### Create a poll_answers, /submit_create_request
 Clicking the button _Submit poll_ sends a request which the server expects to be:
 ```
 {
@@ -65,9 +65,9 @@ poll:<poll_id>
     results -- list of int ordered as the questions, initialized to 0
 ```
 Else it responds with the appropriate error message.
-### Displaying a poll (route: /getpoll)
+### Displaying a poll, /getpoll)
 No authentication of verification is performed. The server checks if `poll_id` passed as `GET` parameter exists. If it does it returns the entire poll. If not it returns an error message.
-### Participating to poll (route: /submit_part_request)
+### Participating to poll, /submit_part_request
 When the user submits his choices, one of the following objects is sent:
 ```
 {
@@ -94,4 +94,5 @@ The server patterns match on the payload, determining which type it is dealing w
     * the user's `verified` field is not set to `True`
     * `user_email` is in the `participants` set
 * the poll is not set to `authenticateOnly` and `user_fingerprint` is in the `participants` set
+
 Otherwise the server traverses the list of int and increment whenever the index matches the index of an answer whose value is `True`. It responds with "Thanks for participating!".
