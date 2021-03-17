@@ -63,6 +63,10 @@ data GetPollResponse = GetPollResponse {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''GetPollResponse)
 
+newtype VerificationResponse = VerificationResponse T.Text
+$(deriveJSON defaultOptions ''VerificationResponse)
+
+initPoll :: Maybe Poll
 initPoll = Just Poll {
         poll_question = "A question",
         poll_description = "A description",

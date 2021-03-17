@@ -9,7 +9,6 @@
 
 module Mailer where
 
-import           Control.Exception      (SomeException, try)
 import           Control.Monad.IO.Class
 import           Data.Aeson
 import           Data.Aeson.TH
