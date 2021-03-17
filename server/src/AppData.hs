@@ -67,13 +67,23 @@ data GetPollResponse = GetPollResponse {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''GetPollResponse)
 
-data VerificationPayload = VerificationPayload {
-    verify_link  :: T.Text,
-    verify_email :: T.Text
+data AskTokenRequest = AskTokenRequest {
+    user_fingerprint :: T.Text,
+    user_email :: T.Text
 }
+$(deriveJSON defaultOptions ''AskTokenRequest)
 
-newtype VerificationResponse = VerificationResponse T.Text
-$(deriveJSON defaultOptions ''VerificationResponse)
+newtype AskTokenResponse = AskTokenResponse { user_hash :: T.Text }
+$(deriveJSON defaultOptions ''AskTokenResponse)
+
+data ConfirmTokenRequest = ConfirmTokenRequest {
+    user_confirm_token  :: T.Text,
+    user_confirm_hash :: T.Text
+}
+$(deriveJSON defaultOptions ''ConfirmTokenRequest)
+
+newtype ConfirmTokenResponse = ConfirmTokenResponse T.Text
+$(deriveJSON defaultOptions ''ConfirmTokenResponse)
 
 initPoll :: Maybe Poll
 initPoll = Just Poll {

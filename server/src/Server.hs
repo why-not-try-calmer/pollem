@@ -9,7 +9,7 @@ module Server
 
 import AppErrors
 import           AppData
-import           Control.Concurrent          (putMVar, takeMVar)
+import           Control.Concurrent          (putMVar, takeMVar, newMVar, newEmptyMVar)
 import           Control.Concurrent.Async    (async, cancel)
 import           Control.Monad.IO.Class      (liftIO)
 import qualified Data.Map                    as M
@@ -19,19 +19,21 @@ import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (schedule)
 import           Servant
+import Data.Text.Encoding
 
 type API =
     "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
     "submit_close_request":> ReqBody '[JSON] SubmitCloseRequest :> Post '[JSON] SubmitPartResponse :<|>
     "getpoll" :> QueryParam "id" String :> Get '[JSON] GetPollResponse :<|>
     "submit_part_request" :> ReqBody '[JSON] SubmitPartRequest :> Post '[JSON] SubmitPartResponse :<|>
-    "verify_email" :> QueryParam "token" String :> Get '[JSON] VerificationResponse
+    "confirm_token" :> ReqBody '[JSON] ConfirmTokenRequest :> Post '[JSON] ConfirmTokenResponse  :<|>
+    "ask_token" :> ReqBody '[JSON] AskTokenRequest :> Post '[JSON] AskTokenResponse
 
 api :: Proxy API
 api = Proxy
 
 server :: State -> Server API
-server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart :<|> verify
+server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart :<|> confirm_token :<|> ask_token state
     where
         submitPart :: SubmitPartRequest -> Handler SubmitPartResponse
         submitPart SubmitPartRequest{} = return (SubmitPartResponse "Thanks for participating.")
@@ -58,15 +60,21 @@ server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart 
         getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
         getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
-        verify :: Maybe String -> Handler VerificationResponse
-        verify (Just s) = 
-            if length s > 5 then 
-                let err =  Error TokenNotExist s
-                in  return $ VerificationResponse $ encodeError err
-            else return (VerificationResponse "ok")
-        verify Nothing = 
-            let err = Error NoEmptyString ""
-            in  return $ VerificationResponse $ encodeError err
+        confirm_token :: ConfirmTokenRequest -> Handler ConfirmTokenResponse
+        confirm_token (ConfirmTokenRequest token hash) = 
+            if T.length token > 5 then 
+                let err =  Error TokenNotExist token
+                in  return $ ConfirmTokenResponse $ encodeError err
+            else return (ConfirmTokenResponse "ok")
+        
+        ask_token :: State -> AskTokenRequest -> Handler AskTokenResponse
+        ask_token mvar (AskTokenRequest _ email) = do
+            token <- liftIO $ do
+                (n, gen) <- takeMVar mvar
+                token <- createToken gen (encodeUtf8 email)
+                putMVar mvar (n, gen)
+                return token
+            return $ AskTokenResponse (decodeUtf8 token)
 
 app :: State -> Application
 app s = simpleCors (serve api . server $ s)

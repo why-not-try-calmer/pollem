@@ -75,7 +75,7 @@ data SendGridEmail = SendGridEmail {
    payload :: Email
 }
 
-makeSendGridEmail :: VerificationPayload -> SendGridEmail
+makeSendGridEmail :: Con -> SendGridEmail
 makeSendGridEmail (VerificationPayload link email) =
    let   email_header = oAuth2Bearer "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"
          content = Content "text/plain" $ "Click the following link to verify against this survey: " `T.append` link
