@@ -36,17 +36,24 @@
                     answers: [false, true, true, false, false, false]
                 }
             },
-            mockAuthenticate() {
+            mockAskToken() {
                 return {
                     user_fingerprint: "okoksdso99",
                     user_email: "mrnycticorax@gmail.com"
                 }
             },
-            authenticate() {
-                return fetch(this.endpoint.test + "/verify_email", {
+            mockConfirmToken() {
+                return {
+                    user_token: "sds54s5787",
+                    user_hash: "élé..y..,p200ßðß{",
+                    user_fingerprint: "5454558787"
+                }
+            },
+            askToken() {
+                return fetch(this.endpoint.test + "/ask_token", {
                     method: "POST",
                     headers: Headers,
-                    body: JSON.stringify(mockAuthenticate()),
+                    body: JSON.stringify(mockAskToken()),
                 })
                     .then(resp => {
                         let parsed_resp = JSON.parse(resp)
@@ -58,6 +65,14 @@
                         }
                     })
                     .catch(err => output("errors", JSON.stringify(err)))
+            },
+            confirmToken() {
+                return fetch(this.endpoint.test + "/confirm_token", {
+                    method: "POST",
+                    headers: Headers,
+                    body: JSON.stringify(mockConfirmToken()),
+                })
+                    .then(resp => console.log(JSON.stringify(resp))).catch(err => output("errors", JSON.stringify(err)))
             },
             createPoll() {
                 return fetch(this.endpoint.test + "/submit_create_request", {
@@ -134,7 +149,11 @@
     </p>
     <p>
         <input type="text" id="email_address" placeholder="email address please" /><button
-            onclick="Requests.authenticate()">Authenticate</button>
+            onclick="Requests.askToken()">Ask for token</button>
+    </p>
+    <p>
+        <input type="text" id="token" placeholder="copy-paste token received via email please" /><button
+            onclick="Requests.confirmToken()">Confirm token</button>
     </p>
     <button onclick="Requests.createPoll()">Create poll</button>
     <p>
