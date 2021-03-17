@@ -6,51 +6,113 @@
     <script>
         const Errors = {
             taken: "Sorry but you appear to have taken the survey already.",
-            noLocalStorage: "localStorage API not supported",
+            noLocalStorage: "`localStorage API` not supported, this application will not work appropriately.",
             noCookieSet: "Sorry but you appear to have cleared your cookies"
         }
+        const Headers = { "Accept": "application/json", "Content-type": "application/json" }
         const Requests = {
             endpoint: {
                 test: "http://localhost:8080",
             },
+            mockCreatePoll() {
+                return {
+                    poll_startDate: new Date(),
+                    poll_endDate: new Date(Date.now() + 12096e5),
+                    poll_question: "Who's or are the most interesting super heroes/vilains?",
+                    poll_description: "Taking together Marvel and DC universes.",
+                    poll_multiple: true,
+                    poll_visible_answers: true,
+                    poll_answers: ["Brainiac", "Vision", "Batman", "Captain Marvel", "Dr. Strange", "Thanos"],
+                    poll_other_answers: [],
+                    poll_requires_verified_email: true,
+                    poll_user_hash: "soosiodsi8873343àé$àéèé-a"
+                }
+            },
+            mockTakePoll() {
+                return {
+                    poll_id: 42,
+                    user_fingerprint: "545433é..à.",
+                    user_hash: "s.dl2pèsd879!",
+                    answers: [false, true, true, false, false, false]
+                }
+            },
+            mockAuthenticate() {
+                return {
+                    user_fingerprint: "okoksdso99",
+                    user_email: "mrnycticorax@gmail.com"
+                }
+            },
+            authenticate() {
+                return fetch(this.endpoint.test + "/verify_email", {
+                    method: "POST",
+                    headers: Headers,
+                    body: JSON.stringify(mockAuthenticate()),
+                })
+                    .then(resp => {
+                        let parsed_resp = JSON.parse(resp)
+                        if (parsed_resp.token && parsed_resp.hash) {
+                            let user_storage = Storage.get();
+                            user_storage.hash = parsed_resp.hash;
+                            Storage.set(user_storage);
+
+                        }
+                    })
+                    .catch(err => output("errors", JSON.stringify(err)))
+            },
             createPoll() {
                 return fetch(this.endpoint.test + "/submit_create_request", {
                     method: "POST",
-                    headers: { "Accept": "application/json", "Content-type": "application/json" },
-                    body: JSON.stringify({ "create_clientId": 30, "create_clientFingerPrint": "Adrien", "create_clientPollId": 21, "create_payload": "2021-03-14T14:51:14+01:00" }),
+                    headers: Headers,
+                    body: JSON.stringify(mockCreatePoll()),
                 })
+                    .then(resp => console.log(JSON.stringify(resp))).catch(err => output("errors", JSON.stringify(err)))
             },
             getPoll(id = 42) {
                 return fetch(this.endpoint.test + "/getpoll?id=" + id.toString, { method: "GET" })
                     .then(resp => console.log(JSON.stringify(resp)))
-                    .catch(err => console.error(JSON.stringify(err)))
+                    .catch(err => output("errors", JSON.stringify(err)))
+            },
+            takePoll() {
+                return fetch(this.endpoint.test + "/submit_part_request" + id.toString, {
+                    method: "POST",
+                    headers: Headers,
+                    body: JSON.stringify(mockTakePoll())
+                })
+                    .then(resp => console.log(JSON.stringify(resp)))
+                    .catch(err => output("errors", JSON.stringify(err)))
             }
+        }
+        const Storage = {
+            checks(fingerprint) {
+                if (!localStorage) {
+                    output("errors", ERRORS.noLocalStorage);
+                    return;
+                }
+                let user_storage = this.get()
+                if (!user_storage) {
+                    user_storage = {
+                        fingerprint: fingerprint,
+                        hash: null,
+                        created: [],
+                        taken: []
+                    };
+                    console.log("Created new localStorage key with " + user_storage);
+                }
+                this.set(user_storage);
+                output("fresh_fingerprint", fingerprint);
+                console.log("Retrieving from storage on pollem : ", user_storage);
+            },
+            set(user_storage) {
+                localStorage.setItem("pollem-user", JSON.stringify(user_storage));
+                output("user_storage", user_storage);
+            },
+            get() { return JSON.parse(localStorage.getItem("pollem-user")) }
         }
         function output(id, val) { document.getElementById(id).innerHTML = val }
-        function initLocalStorage(fingerprint) {
-            if (!localStorage) {
-                output("errors", ERRORS.noLocalStorage);
-                return;
-            }
-            if (!localStorage.getItem("pollem")) {
-                let user_state = JSON.stringify({
-                    fingerprint: fingerprint,
-                    created: [],
-                    taken: []
-                });
-                localStorage.setItem("pollem", user_state);
-                console.log("Created new localStorage key with " + user_state);
-            }
-            let user_state = localStorage.getItem("pollem");
-            output("user_state", user_state);
-            output("fresh_fingerprint", fingerprint);
-            console.log("Retrieving from storage on pollem : ", user_state);
-            // localStorage.clear();
-        }
         function main() {
             FingerprintJS.load().then(fp => {
                 fp.get()
-                    .then(result => initLocalStorage(result.visitorId))
+                    .then(result => Storage.checks(result.visitorId))
                     .then(() => console.log("Finished loading"))
             });
         }
@@ -64,11 +126,21 @@
     <p>Fresh fingerpint:
     <div id="fresh_fingerprint"></div>
     </p>
-    <p>User state:
-    <div id="user_state"></div>
+    <p>User storage:
+    <div id="user_storage"></div>
     </p>
-    <button onclick="Requests.getPoll()">Get poll</button>
+    <p>
+        <button onclick="Requests.getPoll()">*TEST* Get poll</button>
+    </p>
+    <p>
+        <input type="text" id="email_address" placeholder="email address please" /><button
+            onclick="Requests.authenticate()">Authenticate</button>
+    </p>
+    <button onclick="Requests.createPoll()">Create poll</button>
+    <p>
+        <button onclick="Requests.takePoll()">Send poll answers</button>
+    </p>
 </body>
-<script async src="//cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js" onload="main()"></script>
+<script async src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js" onload="main()"></script>
 
 </html>
