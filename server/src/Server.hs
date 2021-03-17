@@ -7,6 +7,7 @@ module Server
     , app
     ) where
 
+import AppErrors
 import           AppData
 import           Control.Concurrent          (putMVar, takeMVar)
 import           Control.Concurrent.Async    (async, cancel)
@@ -23,13 +24,14 @@ type API =
     "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
     "submit_close_request":> ReqBody '[JSON] SubmitCloseRequest :> Post '[JSON] SubmitPartResponse :<|>
     "getpoll" :> QueryParam "id" String :> Get '[JSON] GetPollResponse :<|>
-    "submit_part_request" :> ReqBody '[JSON] SubmitPartRequest :> Post '[JSON] SubmitPartResponse
+    "submit_part_request" :> ReqBody '[JSON] SubmitPartRequest :> Post '[JSON] SubmitPartResponse :<|>
+    "verify_email" :> QueryParam "token" String :> Get '[JSON] VerificationResponse
 
 api :: Proxy API
 api = Proxy
 
 server :: State -> Server API
-server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart
+server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart :<|> verify
     where
         submitPart :: SubmitPartRequest -> Handler SubmitPartResponse
         submitPart SubmitPartRequest{} = return (SubmitPartResponse "Thanks for participating.")
@@ -55,6 +57,16 @@ server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart
         getPoll :: Maybe String -> Handler GetPollResponse
         getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
         getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
+
+        verify :: Maybe String -> Handler VerificationResponse
+        verify (Just s) = 
+            if length s > 5 then 
+                let err =  Error TokenNotExist s
+                in  return $ VerificationResponse $ encodeError err
+            else return (VerificationResponse "ok")
+        verify Nothing = 
+            let err = Error NoEmptyString ""
+            in  return $ VerificationResponse $ encodeError err
 
 app :: State -> Application
 app s = simpleCors (serve api . server $ s)
