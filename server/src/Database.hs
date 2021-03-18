@@ -88,8 +88,7 @@ submit (AnswerPoll hash pollid answers) =
             ) >>= \case TxSuccess _ -> return "Ok"
                         _  -> return "Unable to insert your answers, as a database error occurred. Please try again (later)."
 
---getPoll :: B.ByteString -> Redis (Either T.Text a)
---getPoll :: RedisCtx Queued f => B.ByteString -> Redis (Either T.Text [f [B.ByteString]])
+getPoll :: B.ByteString -> Redis (Either T.Text [[B.ByteString]])
 getPoll pollid =
     let pollid_txt = decodeUtf8 pollid
     in  exists ("poll:" `B.append` pollid) >>= \case
@@ -97,17 +96,19 @@ getPoll pollid =
         Right verdict ->
             if not verdict then return . Left $ "Sorry, you cannot participate to a poll that doesn't exists:" `T.append` pollid_txt
             else smembers ("participants:" `B.append` pollid) >>= \case
-                Right participants ->
+                Right participants -> do
+                    -- must do something about empty participants
                     let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
-                    --let collectAnswers = sequence $ foldr (\p acc -> acc ++ p `getAnswers` pollid) [] participants
-                    in  multiExec collectAnswers >>=
-                    \case
-                        TxError _ -> return . Left $ "An error happened, please try again."
-                        TxSuccess res  -> return . Right $ res
+                    multiExec collectAnswers >>=
+                        \case
+                            TxError _ -> return . Left $ "An error happened, please try again."
+                            TxSuccess res  -> return $ Right res
     where   getAnswers p pollid = do
-                let key = "answers:" `B.append` "12" `B.append` p
+                let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
                 lrange key 0 (-1)
 
 main = do
-    p <- connDo . getPoll $ "12"
-    print "ok"
+    res <- connDo . getPoll $ "12"
+    case res of
+        Left err  -> print $ "OK: " `T.append` err
+        Right res -> print . show $ res
