@@ -12,17 +12,17 @@ import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson.Extra       (encodeStrict)
 import qualified Data.ByteString        as B
 import qualified Data.Text              as T
-import           Data.Text.Encoding     (encodeUtf8)
+import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
 import           Database.Redis
 
 -- Data types
 
 data Submit (a :: *) where
-    CreatePoll :: Integer -> B.ByteString -> B.ByteString -> B.ByteString -> B.ByteString -> [B.ByteString] -> [Int] -> Submit a
-    ClosePoll :: Integer -> Submit a
+    CreatePoll :: B.ByteString  -> B.ByteString -> B.ByteString -> B.ByteString -> B.ByteString -> Submit a
+    ClosePoll :: B.ByteString -> Submit a
     AskToken :: B.ByteString  -> B.ByteString -> B.ByteString -> Submit a
     ConfirmToken :: B.ByteString -> B.ByteString -> Submit a
-    AnswerPoll :: B.ByteString -> Integer -> [B.ByteString] -> Submit a
+    AnswerPoll :: B.ByteString -> B.ByteString -> [(B.ByteString,B.ByteString)] -> Submit a
     deriving (Show, Eq)
 
 -- Actions
@@ -40,7 +40,16 @@ connDo action = withConnect openConnection (`runRedis` action)
 _connDo :: Redis a -> IO ()
 _connDo = void . connDo
 
-submit (CreatePoll pollid recipe startdate isactive authenticateonly participants results) = return "ok"
+submit (CreatePoll pollid recipe startdate isactive authenticateonly) =
+    let pollid_txt = decodeUtf8 pollid
+    in  exists ("poll:" `B.append` pollid) >>= \case
+        Left err -> return (T.pack . show $ err)
+        Right verdict ->
+            if verdict then return $ "This poll already exist " `T.append` pollid_txt
+            else do
+                hmset pollid [("recipe",recipe),("startDate",startdate),("isActive",isactive),("authenticateOnly",authenticateonly)]
+                return $ "Added poll " `T.append` pollid_txt
+
 submit (ClosePoll pollid) = return "ok"
 submit (AskToken hash fingerprint token) =
     let key = "user:" `B.append` hash
@@ -54,7 +63,7 @@ submit (AskToken hash fingerprint token) =
 submit (ConfirmToken hash token) =
     let key = "user:" `B.append` hash
     in  exists key >>= \case
-        Left _ -> return "Sorry and error occured"
+        Left err -> return (T.pack . show $ err)
         Right found ->
             if not found then return "Not email found. Please authenticate again (get a new token) in order to clarify the situation."
             else hget key "token" >>= \case
@@ -66,12 +75,16 @@ submit (ConfirmToken hash token) =
                             hmset key [("verified","true")]
                             return "Thanks, you've successfully confirmed your email address."
                         else return "Sorry, but your token doesn't match our record. Please ask for a new token (authenticate)."
-submit (AnswerPoll hash pollid answers) = return "ok"
-
-createIfExist poll pid = exists ("poll:" `B.append` pid) >>= \case
-    Left s -> liftIO . print $ "Sorry, an error occurred"
-    Right verdict ->
-        if verdict then liftIO . print $ "already exist"
-        else do
-            set pid (encodeStrict poll)
-            liftIO . print $ "added"
+submit (AnswerPoll hash pollid answers) =
+    let pollid_txt = decodeUtf8 pollid
+    in  exists ("poll:" `B.append` pollid) >>= \case
+        Left err -> return (T.pack . show $ err)
+        Right verdict ->
+            if not verdict then return $ "Sorry, you cannot participate to a poll that doesn't exists:" `T.append` pollid_txt
+            else do
+                status <- multiExec $ do
+                    sadd ("participants:" `B.append` pollid) [hash]
+                    hmset ("answers:" `B.append` pollid `B.append` hash) answers
+                case status of
+                    TxSuccess _ -> return "Ok"
+                    _  -> return "Unable to insert your answers, as a database error occurred. Please try again (later)."
