@@ -86,3 +86,15 @@ submit (AnswerPoll hash pollid answers) =
                 hmset ("answers:" `B.append` pollid `B.append` hash) answers
             ) >>= \case TxSuccess _ -> return "Ok"
                         _  -> return "Unable to insert your answers, as a database error occurred. Please try again (later)."
+
+--getPoll :: B.ByteString -> Redis (Either T.Text a)
+getPoll pollid =
+    let pollid_txt = decodeUtf8 pollid
+    in  exists ("poll:" `B.append` pollid) >>= \case
+        Left err -> return . Left $ T.pack . show $ err
+        Right verdict ->
+            if not verdict then return . Left $ "Sorry, you cannot participate to a poll that doesn't exists:" `T.append` pollid_txt
+            else multiExec ( do
+                get "ok"
+            ) >>= \case TxSuccess a -> return . Right $ a
+                        _  -> return . Left $ "Unable to insert your answers, as a database error occurred. Please try again (later)."
