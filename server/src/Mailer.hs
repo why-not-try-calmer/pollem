@@ -75,10 +75,10 @@ data SendGridEmail = SendGridEmail {
    payload :: Email
 }
 
-makeSendGridEmail :: Con -> SendGridEmail
-makeSendGridEmail (VerificationPayload link email) =
+makeSendGridEmail :: T.Text -> T.Text  -> SendGridEmail
+makeSendGridEmail token email =
    let   email_header = oAuth2Bearer "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"
-         content = Content "text/plain" $ "Click the following link to verify against this survey: " `T.append` link
+         content = Content "text/plain" $ "Please copy-paste this token to the 'token' field in the application: " `T.append` token
          sender = Addressee "mrnycticorax@gmail.com" "MrNycticorax"
          addressee = Addressee email "Undisclosed Recipient"
          personalization = PersoObject [addressee] "Mille sabords!"
@@ -88,14 +88,3 @@ sendEmail :: SendGridEmail -> IO ()
 sendEmail (SendGridEmail header email) = runReq defaultHttpConfig $ do
     resp <- req POST (https "api.sendgrid.com" /: "v3" /: "mail" /: "send" ) (ReqBodyJson email) bsResponse header
     liftIO . print $ responseBody resp
-
-main :: IO ()
-main = do
-   let   (email_bs, email_txt) = ("adrien.glauser@gmail.com","adrien.glauser@gmail.com")
-   mvar <- initState
-   (val, gen) <- takeMVar mvar
-   token <- createToken gen email_bs
-   putMVar mvar (val, gen)
-   let   appendDec h t = h `T.append` decodeUtf8 t
-         payload = VerificationPayload ("domain dom / verify_email?token=" `appendDec` token) email_txt
-   sendEmail $ makeSendGridEmail payload

@@ -8,6 +8,8 @@ module Server
     ) where
 
 import AppErrors
+import Mailer
+import Database
 import           AppData
 import           Control.Concurrent          (putMVar, takeMVar, newMVar, newEmptyMVar)
 import           Control.Concurrent.Async    (async, cancel)
@@ -26,14 +28,14 @@ type API =
     "submit_close_request":> ReqBody '[JSON] SubmitCloseRequest :> Post '[JSON] SubmitPartResponse :<|>
     "getpoll" :> QueryParam "id" String :> Get '[JSON] GetPollResponse :<|>
     "submit_part_request" :> ReqBody '[JSON] SubmitPartRequest :> Post '[JSON] SubmitPartResponse :<|>
-    "confirm_token" :> ReqBody '[JSON] ConfirmTokenRequest :> Post '[JSON] ConfirmTokenResponse  :<|>
-    "ask_token" :> ReqBody '[JSON] AskTokenRequest :> Post '[JSON] AskTokenResponse
+    "ask_token" :> ReqBody '[JSON] AskTokenRequest :> Post '[JSON] AskTokenResponse :<|>
+    "confirm_token" :> ReqBody '[JSON] ConfirmTokenRequest :> Post '[JSON] ConfirmTokenResponse
 
 api :: Proxy API
 api = Proxy
 
 server :: State -> Server API
-server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart :<|> confirm_token :<|> ask_token state
+server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_token state :<|> confirm_token 
     where
         submitPart :: SubmitPartRequest -> Handler SubmitPartResponse
         submitPart SubmitPartRequest{} = return (SubmitPartResponse "Thanks for participating.")
@@ -60,21 +62,26 @@ server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart 
         getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
         getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
-        confirm_token :: ConfirmTokenRequest -> Handler ConfirmTokenResponse
-        confirm_token (ConfirmTokenRequest token hash) = 
-            if T.length token > 5 then 
-                let err =  Error TokenNotExist token
-                in  return $ ConfirmTokenResponse $ encodeError err
-            else return (ConfirmTokenResponse "ok")
-        
         ask_token :: State -> AskTokenRequest -> Handler AskTokenResponse
-        ask_token mvar (AskTokenRequest _ email) = do
+        ask_token mvar (AskTokenRequest fingerprint email) = do
+            let encoded = encodeUtf8 email
+                hashed = hashEmail encoded
             token <- liftIO $ do
                 (n, gen) <- takeMVar mvar
-                token <- createToken gen (encodeUtf8 email)
+                token <- createToken gen encoded
                 putMVar mvar (n, gen)
+                sendEmail $ makeSendGridEmail token email
                 return token
-            return $ AskTokenResponse (decodeUtf8 token)
+            liftIO . _connDo $ submitUser (encodeUtf8 hashed) (encodeUtf8 fingerprint) (encodeUtf8 token)
+            return $ AskTokenResponse hashed "Thanks, please check your email"
+
+        confirm_token :: ConfirmTokenRequest -> Handler ConfirmTokenResponse
+        confirm_token (ConfirmTokenRequest token hash) = do
+            either_verdict <- liftIO . connDo $ findHashCheckToken (encodeUtf8 hash) (encodeUtf8 token)
+            let (ok, notOk) = (ConfirmTokenResponse "ok", ConfirmTokenResponse)
+            case either_verdict of
+                Left error -> return $ notOk error 
+                Right verdict -> if verdict then return ok else return $ notOk "bad token" 
 
 app :: State -> Application
 app s = simpleCors (serve api . server $ s)

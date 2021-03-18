@@ -9,16 +9,15 @@ module AppData where
 
 import           Control.Concurrent         (MVar)
 import           Control.Concurrent.MVar
+import           Crypto.Hash
 import           Crypto.KDF.BCrypt
 import           Crypto.Number.Generate
 import           "cryptonite" Crypto.Random
 import           Data.Aeson
 import           Data.Aeson.TH
-import           Data.ByteArray             (ByteArray)
 import qualified Data.ByteString            as B
 import qualified Data.Map                   as M
 import qualified Data.Text                  as T
-import           Data.Text.Encoding
 
 data Poll = Poll {
     poll_startDate               :: T.Text,
@@ -32,7 +31,7 @@ data Poll = Poll {
     poll_other_answers           :: Maybe (M.Map T.Text T.Text),
     poll_requires_verified_email :: Bool,
     poll_creator_fingerprint     :: T.Text,
-    poll_creator_token           :: T.Text 
+    poll_creator_token           :: T.Text
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Poll)
 
@@ -69,16 +68,19 @@ $(deriveJSON defaultOptions ''GetPollResponse)
 
 data AskTokenRequest = AskTokenRequest {
     user_fingerprint :: T.Text,
-    user_email :: T.Text
+    user_email       :: T.Text
 }
 $(deriveJSON defaultOptions ''AskTokenRequest)
 
-newtype AskTokenResponse = AskTokenResponse { user_hash :: T.Text }
+data AskTokenResponse = AskTokenResponse { 
+    user_hash :: T.Text,
+    response :: T.Text
+}
 $(deriveJSON defaultOptions ''AskTokenResponse)
 
 data ConfirmTokenRequest = ConfirmTokenRequest {
-    user_confirm_token  :: T.Text,
-    user_confirm_hash :: T.Text
+    user_confirm_token :: T.Text,
+    user_confirm_hash  :: T.Text
 }
 $(deriveJSON defaultOptions ''ConfirmTokenRequest)
 
@@ -98,7 +100,7 @@ initPoll = Just Poll {
         poll_other_answers = Just . M.fromList $ [("opt1", "First optional")],
         poll_requires_verified_email = False,
         poll_creator_fingerprint = "0x01",
-        poll_creator_token = "lksdlksodi" 
+        poll_creator_token = "lksdlksodi"
     }
 
 type State = MVar (Integer, SystemDRG)
@@ -110,10 +112,12 @@ initState = do
 
 createToken drg salt = do
     let (bytes, gen) = randomBytes drg 16 :: (B.ByteString, SystemDRG)
-        token = bcrypt 8 bytes (salt :: B.ByteString) :: B.ByteString
-    return token
+        digest = bcrypt 8 bytes (salt :: B.ByteString) :: B.ByteString
+    return . T.pack . show $ hashWith SHA1 digest
     where
         randomBytes = flip randomBytesGenerate
+
+hashEmail email = T.pack . show $ hashWith SHA1 email 
 
 createPollId :: IO Integer
 createPollId = generateBetween 1 100000000
