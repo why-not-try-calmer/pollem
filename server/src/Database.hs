@@ -11,6 +11,7 @@ import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson.Extra       (encodeStrict)
 import qualified Data.ByteString        as B
+import           Data.Foldable          (traverse_)
 import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
 import           Database.Redis
@@ -88,13 +89,24 @@ submit (AnswerPoll hash pollid answers) =
                         _  -> return "Unable to insert your answers, as a database error occurred. Please try again (later)."
 
 --getPoll :: B.ByteString -> Redis (Either T.Text a)
+--getPoll :: RedisCtx Queued f => B.ByteString -> Redis (Either T.Text [f [B.ByteString]])
 getPoll pollid =
     let pollid_txt = decodeUtf8 pollid
     in  exists ("poll:" `B.append` pollid) >>= \case
         Left err -> return . Left $ T.pack . show $ err
         Right verdict ->
             if not verdict then return . Left $ "Sorry, you cannot participate to a poll that doesn't exists:" `T.append` pollid_txt
-            else multiExec ( do
-                get "ok"
-            ) >>= \case TxSuccess a -> return . Right $ a
-                        _  -> return . Left $ "Unable to insert your answers, as a database error occurred. Please try again (later)."
+            else smembers ("participants:" `B.append` pollid) >>= \case
+                Right participants ->
+                    let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
+                    in  multiExec collectAnswers >>=
+                    \case
+                        TxError _ -> return . Left $ "An error happened, please try again."
+                        TxSuccess res  -> return . Right $ res
+    where   getAnswers p pollid =
+                let key = "answers:" `B.append` "12" `B.append` p
+                in  return $ lrange key 0 (-1)
+
+main = do
+    -- p <- connDo . getPoll $ "12"
+    print "ok"
