@@ -99,14 +99,15 @@ getPoll pollid =
             else smembers ("participants:" `B.append` pollid) >>= \case
                 Right participants ->
                     let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
+                    --let collectAnswers = sequence $ foldr (\p acc -> acc ++ p `getAnswers` pollid) [] participants
                     in  multiExec collectAnswers >>=
                     \case
                         TxError _ -> return . Left $ "An error happened, please try again."
                         TxSuccess res  -> return . Right $ res
-    where   getAnswers p pollid =
+    where   getAnswers p pollid = do
                 let key = "answers:" `B.append` "12" `B.append` p
-                in  return $ lrange key 0 (-1)
+                lrange key 0 (-1)
 
 main = do
-    -- p <- connDo . getPoll $ "12"
+    p <- connDo . getPoll $ "12"
     print "ok"
