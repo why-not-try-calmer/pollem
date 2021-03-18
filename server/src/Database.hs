@@ -81,10 +81,8 @@ submit (AnswerPoll hash pollid answers) =
         Left err -> return (T.pack . show $ err)
         Right verdict ->
             if not verdict then return $ "Sorry, you cannot participate to a poll that doesn't exists:" `T.append` pollid_txt
-            else do
-                status <- multiExec $ do
-                    sadd ("participants:" `B.append` pollid) [hash]
-                    hmset ("answers:" `B.append` pollid `B.append` hash) answers
-                case status of
-                    TxSuccess _ -> return "Ok"
-                    _  -> return "Unable to insert your answers, as a database error occurred. Please try again (later)."
+            else multiExec ( do
+                sadd ("participants:" `B.append` pollid) [hash]
+                hmset ("answers:" `B.append` pollid `B.append` hash) answers
+            ) >>= \case TxSuccess _ -> return "Ok"
+                        _  -> return "Unable to insert your answers, as a database error occurred. Please try again (later)."
