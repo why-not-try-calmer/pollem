@@ -35,7 +35,7 @@ api :: Proxy API
 api = Proxy
 
 server :: State -> Server API
-server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_token state :<|> confirm_token 
+server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_token state :<|> confirm_token
     where
         submitPart :: SubmitPartRequest -> Handler SubmitPartResponse
         submitPart SubmitPartRequest{} = return (SubmitPartResponse "Thanks for participating.")
@@ -72,16 +72,16 @@ server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart 
                 putMVar mvar (n, gen)
                 sendEmail $ makeSendGridEmail token email
                 return token
-            liftIO . _connDo $ submitUser (encodeUtf8 hashed) (encodeUtf8 fingerprint) (encodeUtf8 token)
-            return $ AskTokenResponse hashed "Thanks, please check your email"
-
+            let asksubmit = AskToken (encodeUtf8 hashed) (encodeUtf8 fingerprint) (encodeUtf8 token)
+            verdict <- liftIO . connDo . submit $ asksubmit 
+            return $ AskTokenResponse hashed verdict
+            
         confirm_token :: ConfirmTokenRequest -> Handler ConfirmTokenResponse
-        confirm_token (ConfirmTokenRequest token hash) = do
-            either_verdict <- liftIO . connDo $ findHashCheckToken (encodeUtf8 hash) (encodeUtf8 token)
-            let (ok, notOk) = (ConfirmTokenResponse "ok", ConfirmTokenResponse)
-            case either_verdict of
-                Left error -> return $ notOk error 
-                Right verdict -> if verdict then return ok else return $ notOk "bad token" 
+        confirm_token (ConfirmTokenRequest token hash) = 
+            do
+            let confirmsubmit = ConfirmToken (encodeUtf8 hash) (encodeUtf8 token)
+            verdict <- liftIO . connDo . submit $ confirmsubmit
+            return $ ConfirmTokenResponse verdict
 
 app :: State -> Application
 app s = simpleCors (serve api . server $ s)

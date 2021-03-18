@@ -18,7 +18,9 @@ import           Data.Aeson.TH
 import qualified Data.ByteString            as B
 import qualified Data.Map                   as M
 import qualified Data.Text                  as T
+import           Data.Text.Encoding         (encodeUtf8)
 
+-- Data types
 data Poll = Poll {
     poll_startDate               :: T.Text,
     poll_endDate                 :: Maybe T.Text,
@@ -34,6 +36,7 @@ data Poll = Poll {
     poll_creator_token           :: T.Text
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Poll)
+
 
 data SubmitPartRequest = SubmitPartRequest {
     part_clientId          :: Int,
@@ -72,9 +75,9 @@ data AskTokenRequest = AskTokenRequest {
 }
 $(deriveJSON defaultOptions ''AskTokenRequest)
 
-data AskTokenResponse = AskTokenResponse { 
+data AskTokenResponse = AskTokenResponse {
     user_hash :: T.Text,
-    response :: T.Text
+    response  :: T.Text
 }
 $(deriveJSON defaultOptions ''AskTokenResponse)
 
@@ -86,6 +89,8 @@ $(deriveJSON defaultOptions ''ConfirmTokenRequest)
 
 newtype ConfirmTokenResponse = ConfirmTokenResponse T.Text
 $(deriveJSON defaultOptions ''ConfirmTokenResponse)
+
+-- App initialization & types
 
 initPoll :: Maybe Poll
 initPoll = Just Poll {
@@ -110,6 +115,7 @@ initState = do
     drg <- getSystemDRG
     newMVar (0, drg)
 
+-- Helpers
 createToken drg salt = do
     let (bytes, gen) = randomBytes drg 16 :: (B.ByteString, SystemDRG)
         digest = bcrypt 8 bytes (salt :: B.ByteString) :: B.ByteString
@@ -117,7 +123,7 @@ createToken drg salt = do
     where
         randomBytes = flip randomBytesGenerate
 
-hashEmail email = T.pack . show $ hashWith SHA1 email 
+hashEmail email = T.pack . show $ hashWith SHA1 email
 
 createPollId :: IO Integer
 createPollId = generateBetween 1 100000000
