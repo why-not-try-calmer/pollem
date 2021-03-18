@@ -7,21 +7,22 @@ module Server
     , app
     ) where
 
-import AppErrors
-import Mailer
-import Database
 import           AppData
-import           Control.Concurrent          (putMVar, takeMVar, newMVar, newEmptyMVar)
+import           AppErrors
+import           Control.Concurrent          (newEmptyMVar, newMVar, putMVar,
+                                              takeMVar)
 import           Control.Concurrent.Async    (async, cancel)
 import           Control.Monad.IO.Class      (liftIO)
 import qualified Data.Map                    as M
 import qualified Data.Text                   as T
+import           Data.Text.Encoding
+import           Database
+import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (schedule)
 import           Servant
-import Data.Text.Encoding
 
 type API =
     "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
@@ -73,11 +74,11 @@ server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart 
                 sendEmail $ makeSendGridEmail token email
                 return token
             let asksubmit = AskToken (encodeUtf8 hashed) (encodeUtf8 fingerprint) (encodeUtf8 token)
-            verdict <- liftIO . connDo . submit $ asksubmit 
+            verdict <- liftIO . connDo . submit $ asksubmit
             return $ AskTokenResponse hashed verdict
-            
+
         confirm_token :: ConfirmTokenRequest -> Handler ConfirmTokenResponse
-        confirm_token (ConfirmTokenRequest token hash) = 
+        confirm_token (ConfirmTokenRequest token hash) =
             do
             let confirmsubmit = ConfirmToken (encodeUtf8 hash) (encodeUtf8 token)
             verdict <- liftIO . connDo . submit $ confirmsubmit
