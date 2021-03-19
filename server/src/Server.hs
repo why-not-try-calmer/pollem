@@ -59,15 +59,16 @@ type API =
 api :: Proxy API
 api = Proxy
 
-server :: State -> Server API
-server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_token state :<|> confirm_token
+server :: Server API
+server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_token :<|> confirm_token
     where
         submitPart :: SubmitPartRequest -> Handler SubmitPartResponse
         submitPart SubmitPartRequest{} = return (SubmitPartResponse "Thanks for participating.")
 
-        submitCreate :: State -> SubmitCreateRequest -> Handler SubmitPartResponse
-        submitCreate mvar (SubmitCreateRequest cid fp pid pay) = do
+        submitCreate :: SubmitCreateRequest -> Handler SubmitPartResponse
+        submitCreate (SubmitCreateRequest cid fp pid pay) = do
             liftIO $ do
+                mvar <- newEmptyMVar
                 (v, g) <- takeMVar mvar
                 -- printing current stat left value
                 print v
@@ -87,10 +88,11 @@ server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart 
         getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
         getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
-        ask_token :: State -> AskTokenRequest -> Handler AskTokenResponse
-        ask_token mvar (AskTokenRequest fingerprint email) = do
+        ask_token :: AskTokenRequest -> Handler AskTokenResponse
+        ask_token (AskTokenRequest fingerprint email) = do
             let encoded = encodeUtf8 email
                 hashed = hashEmail encoded
+            mvar <- liftIO newEmptyMVar
             token <- liftIO $ do
                 (n, gen) <- takeMVar mvar
                 token <- createToken gen encoded
@@ -108,8 +110,8 @@ server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart 
             verdict <- liftIO . connDo . submit $ confirmsubmit
             return $ ConfirmTokenResponse verdict
 
-app :: State -> Application
-app s = simpleCors (serve api . server $ s)
+app :: Config -> Application
+app config = simpleCors $ serve api server
 
 type App = ReaderT Config Handler
 
@@ -117,5 +119,4 @@ startApp :: IO ()
 startApp = do
     state <- initState
     let env = Config initSendgridConfig initRedisConfig state
-
-    run 8080 (app state)
+    run 8080 (app env)
