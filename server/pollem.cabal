@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5433946240ccf87e79d5d9c152f203be5da9ee0e35283c92021f61ff8177e162
+-- hash: f1181f3b24560cd8e3c2cacfcf967b20be77ffe77eeb93ffae0c07a023565821
 
 name:           pollem
 version:        0.1.0.0
@@ -29,7 +29,6 @@ library
       Compute
       Database
       Mailer
-      Requests
       Scheduler
       Server
   other-modules:
@@ -44,9 +43,9 @@ library
     , bytestring
     , containers
     , cryptonite
-    , deepseq
     , hedis
     , memory
+    , mtl
     , req
     , servant-server
     , text
@@ -71,9 +70,9 @@ executable server-exe
     , bytestring
     , containers
     , cryptonite
-    , deepseq
     , hedis
     , memory
+    , mtl
     , pollem
     , req
     , servant-server
@@ -100,12 +99,12 @@ test-suite server-test
     , bytestring
     , containers
     , cryptonite
-    , deepseq
     , hedis
     , hspec
     , hspec-wai
     , hspec-wai-json
     , memory
+    , mtl
     , pollem
     , req
     , servant-server

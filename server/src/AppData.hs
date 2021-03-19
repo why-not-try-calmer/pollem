@@ -19,9 +19,13 @@ import qualified Data.ByteString            as B
 import qualified Data.Map                   as M
 import qualified Data.Text                  as T
 import           Data.Text.Encoding         (encodeUtf8)
+--
 
--- Requests
 
+{- Requests -}
+
+
+--
 data Poll = Poll {
     poll_startDate               :: T.Text,
     poll_endDate                 :: Maybe T.Text,
@@ -59,6 +63,24 @@ data SubmitCloseRequest = SubmitCloseRequest {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''SubmitCloseRequest)
 
+data AskTokenRequest = AskTokenRequest {
+    user_fingerprint :: T.Text,
+    user_email       :: T.Text
+}
+$(deriveJSON defaultOptions ''AskTokenRequest)
+
+data ConfirmTokenRequest = ConfirmTokenRequest {
+    user_confirm_token :: T.Text,
+    user_confirm_hash  :: T.Text
+}
+$(deriveJSON defaultOptions ''ConfirmTokenRequest)
+--
+
+
+{- Responses -}
+
+
+--
 newtype SubmitPartResponse = SubmitPartResponse { msg :: T.Text } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''SubmitPartResponse)
 
@@ -68,29 +90,21 @@ data GetPollResponse = GetPollResponse {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''GetPollResponse)
 
-data AskTokenRequest = AskTokenRequest {
-    user_fingerprint :: T.Text,
-    user_email       :: T.Text
-}
-$(deriveJSON defaultOptions ''AskTokenRequest)
-
 data AskTokenResponse = AskTokenResponse {
     user_hash :: T.Text,
     response  :: T.Text
 }
 $(deriveJSON defaultOptions ''AskTokenResponse)
 
-data ConfirmTokenRequest = ConfirmTokenRequest {
-    user_confirm_token :: T.Text,
-    user_confirm_hash  :: T.Text
-}
-$(deriveJSON defaultOptions ''ConfirmTokenRequest)
-
 newtype ConfirmTokenResponse = ConfirmTokenResponse T.Text
 $(deriveJSON defaultOptions ''ConfirmTokenResponse)
+--
 
--- App initialization & types
 
+{- App initialization & types -}
+
+
+--
 initPoll :: Maybe Poll
 initPoll = Just Poll {
         poll_question = "A question",
@@ -114,8 +128,13 @@ initState = do
     drg <- getSystemDRG
     newMVar (0, drg)
 
--- Helpers
+--
 
+
+{- Helpers -}
+
+
+--
 createToken :: Monad m => SystemDRG -> B.ByteString -> m T.Text
 createToken drg salt = do
     let (bytes, gen) = randomBytes drg 16 :: (B.ByteString, SystemDRG)

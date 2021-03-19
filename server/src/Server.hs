@@ -13,6 +13,8 @@ import           Control.Concurrent          (newEmptyMVar, newMVar, putMVar,
                                               takeMVar)
 import           Control.Concurrent.Async    (async, cancel)
 import           Control.Monad.IO.Class      (liftIO)
+import           Control.Monad.Reader        (ReaderT (runReaderT))
+import qualified Data.ByteString             as B
 import qualified Data.Map                    as M
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
@@ -23,6 +25,28 @@ import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (schedule)
 import           Servant
+
+newtype SendGridConfig = SendGridBearer { bearer :: B.ByteString }
+
+initSendgridConfig :: SendGridConfig
+initSendgridConfig = SendGridBearer "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"
+data RedisConfig = RedisConfig {
+    auth :: Maybe B.ByteString,
+    port :: Int,
+    host :: B.ByteString
+}
+
+initRedisConfig :: RedisConfig
+initRedisConfig = RedisConfig {
+    host ="ec2-108-128-25-66.eu-west-1.compute.amazonaws.com",
+    port = 14459,
+    auth = Just "p17df6aa47fbc3f8dfcbcbfba00334ecece8b39a921ed91d97f6a9eeefd8d1793"
+}
+data Config = Config {
+    sendgridconf :: SendGridConfig,
+    redisconf    :: RedisConfig,
+    state        :: State
+}
 
 type API =
     "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
@@ -87,7 +111,11 @@ server state = submitCreate state :<|> submitClose :<|> getPoll :<|> submitPart 
 app :: State -> Application
 app s = simpleCors (serve api . server $ s)
 
+type App = ReaderT Config Handler
+
 startApp :: IO ()
 startApp = do
     state <- initState
+    let env = Config initSendgridConfig initRedisConfig state
+
     run 8080 (app state)
