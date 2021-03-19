@@ -13,7 +13,7 @@ import           Control.Concurrent          (newEmptyMVar, newMVar, putMVar,
                                               takeMVar)
 import           Control.Concurrent.Async    (async, cancel)
 import           Control.Monad.IO.Class      (liftIO)
-import           Control.Monad.Reader        (ReaderT (runReaderT))
+import           Control.Monad.Reader
 import qualified Data.ByteString             as B
 import qualified Data.Map                    as M
 import qualified Data.Text                   as T
@@ -49,22 +49,26 @@ data Config = Config {
 }
 
 type API =
-    "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
+    "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse {- :<|>
     "submit_close_request":> ReqBody '[JSON] SubmitCloseRequest :> Post '[JSON] SubmitPartResponse :<|>
     "getpoll" :> QueryParam "id" String :> Get '[JSON] GetPollResponse :<|>
     "submit_part_request" :> ReqBody '[JSON] SubmitPartRequest :> Post '[JSON] SubmitPartResponse :<|>
     "ask_token" :> ReqBody '[JSON] AskTokenRequest :> Post '[JSON] AskTokenResponse :<|>
     "confirm_token" :> ReqBody '[JSON] ConfirmTokenRequest :> Post '[JSON] ConfirmTokenResponse
+-}
 
 api :: Proxy API
 api = Proxy
 
-server :: Server API
-server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_token :<|> confirm_token
+server :: ServerT API App
+server = submitCreate -- submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_token :<|> confirm_token
     where
-        submitPart :: SubmitPartRequest -> Handler SubmitPartResponse
-        submitPart SubmitPartRequest{} = return (SubmitPartResponse "Thanks for participating.")
+        submitCreate :: SubmitCreateRequest -> App SubmitPartResponse --SubmitPartRequest -> Handler SubmitPartResponse
+        submitCreate req = do
+            env <- ask
+            return $ SubmitPartResponse "ok"
 
+        {-
         submitCreate :: SubmitCreateRequest -> Handler SubmitPartResponse
         submitCreate (SubmitCreateRequest cid fp pid pay) = do
             liftIO $ do
@@ -109,9 +113,13 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_tok
             let confirmsubmit = ConfirmToken (encodeUtf8 hash) (encodeUtf8 token)
             verdict <- liftIO . connDo . submit $ confirmsubmit
             return $ ConfirmTokenResponse verdict
+        -}
+
+injectEnv :: Config -> App a -> Handler a
+injectEnv = flip runReaderT
 
 app :: Config -> Application
-app config = simpleCors $ serve api server
+app env = simpleCors $ serve api $ hoistServer api (injectEnv env) server
 
 type App = ReaderT Config Handler
 
