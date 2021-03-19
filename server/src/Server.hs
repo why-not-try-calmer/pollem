@@ -115,13 +115,13 @@ server = submitCreate -- submitCreate :<|> submitClose :<|> getPoll :<|> submitP
             return $ ConfirmTokenResponse verdict
         -}
 
+type App = ReaderT Config Handler
+
 injectEnv :: Config -> App a -> Handler a
 injectEnv = flip runReaderT
 
 app :: Config -> Application
 app env = simpleCors $ serve api $ hoistServer api (injectEnv env) server
-
-type App = ReaderT Config Handler
 
 startApp :: IO ()
 startApp = do
