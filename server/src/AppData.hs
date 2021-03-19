@@ -20,7 +20,8 @@ import qualified Data.Map                   as M
 import qualified Data.Text                  as T
 import           Data.Text.Encoding         (encodeUtf8)
 
--- Data types
+-- Requests
+
 data Poll = Poll {
     poll_startDate               :: T.Text,
     poll_endDate                 :: Maybe T.Text,
@@ -37,7 +38,6 @@ data Poll = Poll {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Poll)
 
-
 data SubmitPartRequest = SubmitPartRequest {
     part_clientId          :: Int,
     part_clientFingerPrint :: T.Text,
@@ -45,7 +45,6 @@ data SubmitPartRequest = SubmitPartRequest {
     part_poll              :: Poll
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''SubmitPartRequest)
-
 data SubmitCreateRequest = SubmitCreateRequest {
     create_clientId          :: Int,
     create_clientFingerPrint :: T.Text ,
@@ -116,6 +115,8 @@ initState = do
     newMVar (0, drg)
 
 -- Helpers
+
+createToken :: Monad m => SystemDRG -> B.ByteString -> m T.Text
 createToken drg salt = do
     let (bytes, gen) = randomBytes drg 16 :: (B.ByteString, SystemDRG)
         digest = bcrypt 8 bytes (salt :: B.ByteString) :: B.ByteString
