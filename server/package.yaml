@@ -35,6 +35,7 @@ dependencies:
 - cryptonite
 - bytestring
 - memory
+- deepseq
 
 library:
   source-dirs: src

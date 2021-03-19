@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 78564b287be5f7a53b4df1b04f97e675e4f7e08ac61306d94fac71567f523bd4
+-- hash: a08347b98056d4727ff06c6e6792b956aa3129ad7600e0f36030b130fc008e65
 
 name:           pollem
 version:        0.1.0.0
@@ -26,6 +26,7 @@ library
   exposed-modules:
       AppData
       AppErrors
+      Compute
       Database
       Mailer
       Scheduler
@@ -42,6 +43,7 @@ library
     , bytestring
     , containers
     , cryptonite
+    , deepseq
     , hedis
     , memory
     , req
@@ -68,6 +70,7 @@ executable server-exe
     , bytestring
     , containers
     , cryptonite
+    , deepseq
     , hedis
     , memory
     , pollem
@@ -96,6 +99,7 @@ test-suite server-test
     , bytestring
     , containers
     , cryptonite
+    , deepseq
     , hedis
     , hspec
     , hspec-wai

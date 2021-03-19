@@ -7,11 +7,12 @@
 module Database where
 
 import           AppData
+import           Compute
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson.Extra       (encodeStrict)
 import qualified Data.ByteString        as B
-import           Data.Foldable          (traverse_)
+import           Data.Foldable          (foldl', traverse_)
 import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
 import           Database.Redis
@@ -106,9 +107,3 @@ getPoll pollid =
     where   getAnswers p pollid = do
                 let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
                 lrange key 0 (-1)
-
-main = do
-    res <- connDo . getPoll $ "12"
-    case res of
-        Left err  -> print $ "OK: " `T.append` err
-        Right res -> print . show $ res
