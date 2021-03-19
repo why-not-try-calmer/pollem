@@ -11,4 +11,4 @@ addAll [x] = Right x
 addAll ls =
     let (x:xs) = ls
     in  if any (/= x) xs then Left "Empty list. Borked data probably."
-        else Right . map sum . transpose $ ls
+        else Right $ map sum . transpose $ ls
