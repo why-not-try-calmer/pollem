@@ -1,7 +1,9 @@
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeOperators     #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE TypeOperators              #-}
 
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Server
     ( startApp
     , app
@@ -12,6 +14,7 @@ import           AppErrors
 import           Control.Concurrent          (newEmptyMVar, newMVar, putMVar,
                                               takeMVar)
 import           Control.Concurrent.Async    (async, cancel)
+import           Control.Monad.Except        (ExceptT, runExceptT)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Reader
 import qualified Data.ByteString             as B
@@ -60,10 +63,10 @@ type API =
 api :: Proxy API
 api = Proxy
 
-server :: ServerT API App
+server :: ServerT API AppM
 server = submitCreate -- submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_token :<|> confirm_token
     where
-        submitCreate :: SubmitCreateRequest -> App SubmitPartResponse --SubmitPartRequest -> Handler SubmitPartResponse
+        submitCreate :: SubmitCreateRequest -> AppM SubmitPartResponse --SubmitPartRequest -> Handler SubmitPartResponse
         submitCreate req = do
             env <- ask
             return $ SubmitPartResponse "ok"
@@ -115,10 +118,16 @@ server = submitCreate -- submitCreate :<|> submitClose :<|> getPoll :<|> submitP
             return $ ConfirmTokenResponse verdict
         -}
 
-type App = ReaderT Config Handler
+newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }
+    deriving (Functor, Applicative,Monad,MonadIO,MonadReader Config)
 
-injectEnv :: Config -> App a -> Handler a
-injectEnv = flip runReaderT
+runAppM :: AppM a -> Config -> IO (Either ServerError a)
+runAppM app = runExceptT . runReaderT (unAppM app)
+
+injectEnv :: Config -> AppM a -> Handler a
+injectEnv config app = liftIO (runAppM app config) >>= \case
+    Left err -> throwError err
+    Right v  -> return v
 
 app :: Config -> Application
 app env = simpleCors $ serve api $ hoistServer api (injectEnv env) server
