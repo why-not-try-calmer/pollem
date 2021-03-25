@@ -119,7 +119,7 @@ server = submitCreate -- submitCreate :<|> submitClose :<|> getPoll :<|> submitP
         -}
 
 newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }
-    deriving (Functor, Applicative,Monad,MonadIO,MonadReader Config)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader Config)
 
 runAppM :: AppM a -> Config -> IO (Either ServerError a)
 runAppM app = runExceptT . runReaderT (unAppM app)
