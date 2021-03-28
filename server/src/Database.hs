@@ -7,6 +7,7 @@
 module Database where
 
 import           AppData
+import           AppErrors
 import           Compute
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
@@ -16,7 +17,6 @@ import           Data.Foldable          (foldl', traverse_)
 import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
 import           Database.Redis
-import AppErrors
 
 -- Data types
 
@@ -25,7 +25,7 @@ data Submit (a :: *) where
     ClosePoll :: B.ByteString -> Submit a
     AskToken :: B.ByteString  -> B.ByteString -> B.ByteString -> Submit a
     ConfirmToken :: B.ByteString -> B.ByteString -> Submit a
-    AnswerPoll :: B.ByteString -> B.ByteString -> [(B.ByteString,B.ByteString)] -> Submit a
+    AnswerPoll :: B.ByteString -> B.ByteString -> B.ByteString -> B.ByteString -> Submit a
     deriving (Show, Eq)
 
 -- Actions
@@ -78,7 +78,7 @@ submit (ConfirmToken hash token) =
                             hmset key [("verified","true")]
                             return "Thanks, you've successfully confirmed your email address."
                         else return "Sorry, but your token doesn't match our record. Please ask for a new token (authenticate)."
-submit (AnswerPoll hash pollid answers) =
+submit (AnswerPoll hash finger pollid answers) =
     let pollid_txt = decodeUtf8 pollid
     in  hgetall ("poll:" `B.append` pollid) >>= \case
             Left err -> return $ "Sorry, you cannot participate to a poll that doesn't exists:" `T.append` pollid_txt
@@ -89,7 +89,7 @@ submit (AnswerPoll hash pollid answers) =
                         if not verdict then return . encodeError . AppErrors.Error UserNotExist $ hash
                         else multiExec ( do
                             sadd ("participants:" `B.append` pollid) [hash]
-                            hmset ("answers:" `B.append` pollid `B.append` hash) answers
+                            set ("answers:" `B.append` pollid `B.append` hash) answers
                         ) >>= \case TxSuccess _ -> return "Ok"
                                     _  -> return "Unable to insert your answers, as a database error occurred. Please try again (later)."
 
