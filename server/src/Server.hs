@@ -78,7 +78,7 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_tok
                 -- incrementing left value with 'last number'; replacing into state
                 putMVar mvar (v+1, g)
                 -- scheduling worker runtime thread to prepare callback upon time limit reached
-                th <- async $ schedule . T.unpack $ pay
+                th <- async . schedule . show $ pay
                 -- call `cancel` on th if you want to unschedule the event
                 return ()
             return (SubmitPartResponse "Thanks for creating this poll. Before we can make it happen, please verify your email using the link sent there.")
@@ -96,17 +96,17 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_tok
 
         ask_token :: AskTokenRequest -> AppM AskTokenResponse
         ask_token (AskTokenRequest fingerprint email) = do
-            let encoded = encodeUtf8 email
-                hashed = hashEmail encoded
+            let hashed = hashEmail (encodeUtf8 email)
             env <- ask
             let mvar = state env
             token <- liftIO $ do
                 (n, gen) <- takeMVar mvar
-                token <- createToken gen encoded
+                token <- createToken gen (encodeUtf8 email)
                 putMVar mvar (n, gen)
                 sendEmail $ makeSendGridEmail token email
                 return token
-            let asksubmit = AskToken (encodeUtf8 hashed) (encodeUtf8 fingerprint) (encodeUtf8 token)
+            let hashed_b = encodeUtf8 hashed
+                asksubmit = AskToken  hashed_b (encodeUtf8 fingerprint) (encodeUtf8 token)
             verdict <- liftIO . connDo . submit $ asksubmit
             return $ AskTokenResponse hashed verdict
 

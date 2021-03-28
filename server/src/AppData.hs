@@ -18,7 +18,7 @@ import           Data.Aeson.TH
 import qualified Data.ByteString            as B
 import qualified Data.Map                   as M
 import qualified Data.Text                  as T
-import           Data.Text.Encoding         (encodeUtf8)
+
 --
 
 
@@ -49,6 +49,7 @@ data SubmitPartRequest = SubmitPartRequest {
     part_poll              :: Poll
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''SubmitPartRequest)
+
 data SubmitCreateRequest = SubmitCreateRequest {
     create_clientId          :: Int,
     create_clientFingerPrint :: T.Text ,
@@ -139,11 +140,11 @@ createToken :: Monad m => SystemDRG -> B.ByteString -> m T.Text
 createToken drg salt = do
     let (bytes, gen) = randomBytes drg 16 :: (B.ByteString, SystemDRG)
         digest = bcrypt 8 bytes (salt :: B.ByteString) :: B.ByteString
-    return . T.pack . show $ hashWith SHA1 digest
+    return . T.pack . show . hashWith SHA256 $ digest
     where
         randomBytes = flip randomBytesGenerate
 
-hashEmail email = T.pack . show $ hashWith SHA1 email
+hashEmail email = T.pack . show $ hashWith SHA256 email
 
 createPollId :: IO Integer
 createPollId = generateBetween 1 100000000
