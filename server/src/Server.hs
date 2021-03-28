@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeOperators              #-}
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RecordWildCards            #-}
 module Server
     ( startApp
     , app
@@ -28,6 +29,7 @@ import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (schedule)
 import           Servant
+import Control.Exception (try)
 
 newtype SendGridConfig = SendGridBearer { bearer :: B.ByteString }
 
@@ -52,30 +54,24 @@ data Config = Config {
 }
 
 type API =
-    "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse {- :<|>
+    "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
     "submit_close_request":> ReqBody '[JSON] SubmitCloseRequest :> Post '[JSON] SubmitPartResponse :<|>
     "getpoll" :> QueryParam "id" String :> Get '[JSON] GetPollResponse :<|>
     "submit_part_request" :> ReqBody '[JSON] SubmitPartRequest :> Post '[JSON] SubmitPartResponse :<|>
     "ask_token" :> ReqBody '[JSON] AskTokenRequest :> Post '[JSON] AskTokenResponse :<|>
     "confirm_token" :> ReqBody '[JSON] ConfirmTokenRequest :> Post '[JSON] ConfirmTokenResponse
--}
 
 api :: Proxy API
 api = Proxy
 
 server :: ServerT API AppM
-server = submitCreate -- submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_token :<|> confirm_token
+server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_token :<|> confirm_token
     where
-        submitCreate :: SubmitCreateRequest -> AppM SubmitPartResponse --SubmitPartRequest -> Handler SubmitPartResponse
-        submitCreate req = do
-            env <- ask
-            return $ SubmitPartResponse "ok"
-
-        {-
-        submitCreate :: SubmitCreateRequest -> Handler SubmitPartResponse
+        submitCreate :: SubmitCreateRequest -> AppM SubmitPartResponse
         submitCreate (SubmitCreateRequest cid fp pid pay) = do
+            env <- ask
+            let mvar = state env
             liftIO $ do
-                mvar <- newEmptyMVar
                 (v, g) <- takeMVar mvar
                 -- printing current stat left value
                 print v
@@ -84,22 +80,26 @@ server = submitCreate -- submitCreate :<|> submitClose :<|> getPoll :<|> submitP
                 -- scheduling worker runtime thread to prepare callback upon time limit reached
                 th <- async $ schedule . T.unpack $ pay
                 -- call `cancel` on th if you want to unschedule the event
-                -- cancel th
                 return ()
             return (SubmitPartResponse "Thanks for creating this poll. Before we can make it happen, please verify your email using the link sent there.")
 
-        submitClose :: SubmitCloseRequest -> Handler SubmitPartResponse
-        submitClose SubmitCloseRequest{} = return (SubmitPartResponse "Thanks for creating this poll.")
+        submitClose :: SubmitCloseRequest -> AppM SubmitPartResponse
+        submitClose SubmitCloseRequest{} = return $ SubmitPartResponse "Thanks for creating this poll."
 
-        getPoll :: Maybe String -> Handler GetPollResponse
+        getPoll :: Maybe String -> AppM GetPollResponse
         getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
         getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
-        ask_token :: AskTokenRequest -> Handler AskTokenResponse
+        submitPart payload@SubmitPartRequest{..} = do
+            res <- liftIO . connDo  . submit $ AnswerPoll "ok" "ok" [("ok", "ok")]
+            return . SubmitPartResponse $ res
+
+        ask_token :: AskTokenRequest -> AppM AskTokenResponse
         ask_token (AskTokenRequest fingerprint email) = do
             let encoded = encodeUtf8 email
                 hashed = hashEmail encoded
-            mvar <- liftIO newEmptyMVar
+            env <- ask
+            let mvar = state env
             token <- liftIO $ do
                 (n, gen) <- takeMVar mvar
                 token <- createToken gen encoded
@@ -110,13 +110,11 @@ server = submitCreate -- submitCreate :<|> submitClose :<|> getPoll :<|> submitP
             verdict <- liftIO . connDo . submit $ asksubmit
             return $ AskTokenResponse hashed verdict
 
-        confirm_token :: ConfirmTokenRequest -> Handler ConfirmTokenResponse
-        confirm_token (ConfirmTokenRequest token hash) =
-            do
+        confirm_token :: ConfirmTokenRequest -> AppM ConfirmTokenResponse
+        confirm_token (ConfirmTokenRequest token hash) = do
             let confirmsubmit = ConfirmToken (encodeUtf8 hash) (encodeUtf8 token)
             verdict <- liftIO . connDo . submit $ confirmsubmit
             return $ ConfirmTokenResponse verdict
-        -}
 
 newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader Config)

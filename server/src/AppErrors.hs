@@ -5,7 +5,7 @@ module AppErrors where
 
 import qualified Data.Text as T
 
-data ErrorT = BadEmail | PollExists | PollNotExist | PollIncomplete | PollTakenAlready | NoEmptyString | TokenNotExist | Database
+data ErrorT = BadEmail | PollExists | PollNotExist | PollIncomplete | PollTakenAlready | NoEmptyString | TokenNotExist | Database | UserNotExist
 
 data Error a = Error ErrorT a
 
@@ -21,3 +21,4 @@ encodeError (Error PollTakenAlready v) =  toText v "You've taken this poll alrea
 encodeError (Error NoEmptyString _) = toText "" "The string you've submitted was empty."
 encodeError (Error TokenNotExist v) =  toText v "This token does not exist (anymore): "
 encodeError (Error Database v) = toText v "Sorry, an error occured with the database. What you were looking for couldn't be found."
+encodeError (Error UserNotExist v) =  toText v "This user does not exist. Please ask for a new token."
