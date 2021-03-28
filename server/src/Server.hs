@@ -1,10 +1,8 @@
 {-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TypeOperators              #-}
-
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RecordWildCards            #-}
 module Server
     ( startApp
     , app
@@ -15,10 +13,14 @@ import           AppErrors
 import           Control.Concurrent          (newEmptyMVar, newMVar, putMVar,
                                               takeMVar)
 import           Control.Concurrent.Async    (async, cancel)
+import           Control.Exception           (try)
 import           Control.Monad.Except        (ExceptT, runExceptT)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Reader
+import           Data.Aeson                  (ToJSON (toEncoding), encode,
+                                              fromEncoding, fromJSON, toJSON)
 import qualified Data.ByteString             as B
+import qualified Data.ByteString.Lazy        as BL
 import qualified Data.Map                    as M
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
@@ -29,7 +31,6 @@ import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (schedule)
 import           Servant
-import Control.Exception (try)
 
 newtype SendGridConfig = SendGridBearer { bearer :: B.ByteString }
 
@@ -73,8 +74,6 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_tok
             let mvar = state env
             liftIO $ do
                 (v, g) <- takeMVar mvar
-                -- printing current stat left value
-                print v
                 -- incrementing left value with 'last number'; replacing into state
                 putMVar mvar (v+1, g)
                 -- scheduling worker runtime thread to prepare callback upon time limit reached
@@ -90,9 +89,12 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_tok
         getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
         getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
-        submitPart payload@SubmitPartRequest{..} = do
-            res <- liftIO . connDo  . submit $ AnswerPoll "ok" "ok" [("ok", "ok")]
-            return . SubmitPartResponse $ res
+        submitPart (SubmitPartRequest hash finger pollid poll) =
+            let poll_encoded = B.concat . BL.toChunks. encode $ poll
+            in do
+                res <- liftIO . connDo  . submit $
+                    AnswerPoll (encodeUtf8 hash) (encodeUtf8 finger) (encodeUtf8 . T.pack . show $ pollid) poll_encoded
+                return . SubmitPartResponse $ res
 
         ask_token :: AskTokenRequest -> AppM AskTokenResponse
         ask_token (AskTokenRequest fingerprint email) = do
@@ -115,6 +117,7 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_tok
             let confirmsubmit = ConfirmToken (encodeUtf8 hash) (encodeUtf8 token)
             verdict <- liftIO . connDo . submit $ confirmsubmit
             return $ ConfirmTokenResponse verdict
+
 
 newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader Config)
