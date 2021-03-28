@@ -43,7 +43,7 @@ data Poll = Poll {
 $(deriveJSON defaultOptions ''Poll)
 
 data SubmitPartRequest = SubmitPartRequest {
-    part_clientId          :: Int,
+    part_clientId          :: T.Text,
     part_clientFingerPrint :: T.Text,
     part_clientPollId      :: Int,
     part_poll              :: Poll
