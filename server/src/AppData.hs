@@ -91,10 +91,7 @@ data GetPollResponse = GetPollResponse {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''GetPollResponse)
 
-data AskTokenResponse = AskTokenResponse {
-    user_hash :: T.Text,
-    response  :: T.Text
-}
+newtype AskTokenResponse = AskTokenResponse T.Text
 $(deriveJSON defaultOptions ''AskTokenResponse)
 
 newtype ConfirmTokenResponse = ConfirmTokenResponse T.Text
@@ -106,6 +103,30 @@ $(deriveJSON defaultOptions ''ConfirmTokenResponse)
 
 
 --
+newtype SendGridConfig = SendGridBearer { bearer :: B.ByteString }
+
+initSendgridConfig :: SendGridConfig
+initSendgridConfig = SendGridBearer "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"
+
+data RedisConfig = RedisConfig {
+    auth :: Maybe B.ByteString,
+    port :: Integer,
+    host :: String
+}
+
+initRedisConfig :: RedisConfig
+initRedisConfig = RedisConfig {
+    host ="ec2-108-128-25-66.eu-west-1.compute.amazonaws.com",
+    port = 14459,
+    auth = Just "p17df6aa47fbc3f8dfcbcbfba00334ecece8b39a921ed91d97f6a9eeefd8d1793"
+}
+
+data Config = Config {
+    sendgridconf :: SendGridConfig,
+    redisconf    :: RedisConfig,
+    state        :: State
+}
+
 initPoll :: Maybe Poll
 initPoll = Just Poll {
         poll_question = "A question",

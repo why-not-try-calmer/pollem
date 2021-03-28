@@ -75,9 +75,9 @@ data SendGridEmail = SendGridEmail {
    payload :: Email
 }
 
-makeSendGridEmail :: T.Text -> T.Text  -> SendGridEmail
-makeSendGridEmail token email =
-   let   email_header = oAuth2Bearer "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"
+makeSendGridEmail :: SendGridConfig -> T.Text -> T.Text  -> SendGridEmail
+makeSendGridEmail (SendGridBearer bearer) token email =
+   let   email_header = oAuth2Bearer bearer
          content = Content "text/plain" $ "Please copy-paste this token to the 'token' field in the application: " `T.append` token
          sender = Addressee "mrnycticorax@gmail.com" "MrNycticorax"
          addressee = Addressee email "Undisclosed Recipient"

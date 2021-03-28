@@ -9,7 +9,6 @@ module Server
     ) where
 
 import           AppData
-import           AppErrors
 import           Control.Concurrent          (newEmptyMVar, newMVar, putMVar,
                                               takeMVar)
 import           Control.Concurrent.Async    (async, cancel)
@@ -25,34 +24,13 @@ import qualified Data.Map                    as M
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
 import           Database
+import qualified ErrorsReplies               as ER
 import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (schedule)
 import           Servant
-
-newtype SendGridConfig = SendGridBearer { bearer :: B.ByteString }
-
-initSendgridConfig :: SendGridConfig
-initSendgridConfig = SendGridBearer "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"
-data RedisConfig = RedisConfig {
-    auth :: Maybe B.ByteString,
-    port :: Int,
-    host :: B.ByteString
-}
-
-initRedisConfig :: RedisConfig
-initRedisConfig = RedisConfig {
-    host ="ec2-108-128-25-66.eu-west-1.compute.amazonaws.com",
-    port = 14459,
-    auth = Just "p17df6aa47fbc3f8dfcbcbfba00334ecece8b39a921ed91d97f6a9eeefd8d1793"
-}
-data Config = Config {
-    sendgridconf :: SendGridConfig,
-    redisconf    :: RedisConfig,
-    state        :: State
-}
 
 type API =
     "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
@@ -89,12 +67,15 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_tok
         getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
         getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
-        submitPart (SubmitPartRequest hash finger pollid poll) =
+        submitPart :: SubmitPartRequest -> AppM SubmitPartResponse
+        submitPart (SubmitPartRequest hash finger pollid poll) = do
             let poll_encoded = B.concat . BL.toChunks. encode $ poll
-            in do
-                res <- liftIO . connDo  . submit $
-                    AnswerPoll (encodeUtf8 hash) (encodeUtf8 finger) (encodeUtf8 . T.pack . show $ pollid) poll_encoded
-                return . SubmitPartResponse $ res
+            env <- ask
+            res <- liftIO . connDo (redisconf env) . submit $
+                AnswerPoll (encodeUtf8 hash) (encodeUtf8 finger) (encodeUtf8 . T.pack . show $ pollid) poll_encoded
+            case res of
+                Left err  -> return . SubmitPartResponse . ER.encodeError $ err
+                Right msg -> return . SubmitPartResponse . ER.encodeOk $ msg
 
         ask_token :: AskTokenRequest -> AppM AskTokenResponse
         ask_token (AskTokenRequest fingerprint email) = do
@@ -105,18 +86,23 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_tok
                 (n, gen) <- takeMVar mvar
                 token <- createToken gen (encodeUtf8 email)
                 putMVar mvar (n, gen)
-                sendEmail $ makeSendGridEmail token email
+                sendEmail $ makeSendGridEmail (sendgridconf env) token email
                 return token
             let hashed_b = encodeUtf8 hashed
                 asksubmit = AskToken  hashed_b (encodeUtf8 fingerprint) (encodeUtf8 token)
-            verdict <- liftIO . connDo . submit $ asksubmit
-            return $ AskTokenResponse hashed verdict
+            res <- liftIO . connDo (redisconf env) . submit $ asksubmit
+            case res of
+                Left err  -> return . AskTokenResponse . ER.encodeError $ err
+                Right msg -> return . AskTokenResponse . ER.encodeOk $ msg
 
         confirm_token :: ConfirmTokenRequest -> AppM ConfirmTokenResponse
         confirm_token (ConfirmTokenRequest token hash) = do
             let confirmsubmit = ConfirmToken (encodeUtf8 hash) (encodeUtf8 token)
-            verdict <- liftIO . connDo . submit $ confirmsubmit
-            return $ ConfirmTokenResponse verdict
+            env <- ask
+            res <- liftIO . connDo (redisconf env) . submit $ confirmsubmit
+            case res of
+                Left err -> return . ConfirmTokenResponse . ER.encodeError $ err
+                Right msg -> return . ConfirmTokenResponse . ER.encodeOk $ msg
 
 
 newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }
