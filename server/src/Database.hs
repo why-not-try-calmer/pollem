@@ -136,9 +136,9 @@ getPoll (SGet pollid) =
                     let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
                     in  multiExec collectAnswers >>= \case
                         TxError _ -> return . Left . ER.Err Database $ mempty 
-                        TxSuccess res  -> do
+                        TxSuccess res  ->
                             let mb_decoded = sequence $ traverse decode_one <$> res 
-                            case mb_decoded of
+                            in  case mb_decoded of
                                 Just answers -> case collect . head $ answers of
                                     Right collected -> return . Right $ mockPoll 
     where   getAnswers p pollid = do
