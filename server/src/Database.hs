@@ -20,6 +20,16 @@ import           ErrorsReplies
 import qualified ErrorsReplies          as ER
 
 -- Data types
+{-
+class Submits a where
+    submit' :: a -> T.Text
+
+instance Submits SubmitPoll where
+    submit' (SubmitPoll i r s a) = "submit poll"
+
+instance Submits SubmitClosePoll where
+    submit' (SubmitClosePoll i) = "submit close poll"
+-}
 
 data SubmitPoll = SubmitPoll {
     create_poll_id        :: B.ByteString,
