@@ -63,9 +63,9 @@ If `user_hash` exists, and the payload is valid, the server generates a random n
 poll:<poll_id>
     recipe -- the above as a single JSON string
     startDate -- string
-    isActive -- boolean
+    active -- boolean
     authenticatedOnly -- boolean
-    participants -- set of fingerprints if not authenticateOnly, of user_emails otherwise
+    participants -- set of fingerprints
     results -- list of int ordered as the questions, initialized to 0
 ```
 Else it responds with the appropriate error message.
@@ -94,11 +94,8 @@ or
 The server patterns match on the payload, determining which type it is dealing with. It checks the database for `poll:<poll_id>`. Returns error if:
 * the `poll_id` does not exist
 * the poll is not longer active
-* the poll is set to `authenticateOnly` and one of the following obtains:
-    * the payload does not have an `user_email` field; or 
-    * the value of this field does not exist under `email:<cryptohashed user_email>`; or
-    * the user's `verified` field is not set to `True`
-    * `user_email` is in the `participants` set
-* the poll is not set to `authenticateOnly` and `user_fingerprint` is in the `participants` set
+* the user's `verified` field is not set to `True`
+* `user_email` is in the `participants` set
+* `user_fingerprint` is in the `participants` set
 
 Otherwise the server traverses the list of int and increment whenever the index matches the index of an answer whose value is `True`. It responds with "Thanks for participating!".

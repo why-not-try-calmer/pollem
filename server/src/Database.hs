@@ -44,12 +44,13 @@ connDo config action = withConnect (openConnection config) (`runRedis` action)
 _connDo :: RedisConfig  -> Redis a -> IO ()
 _connDo config = void . connDo config
 
+submit :: Submit a -> Redis (Either (Err T.Text) (Ok T.Text))
 submit (CreatePoll pollid recipe startdate isactive authenticateonly) =
     let pollid_txt = decodeUtf8 pollid
     in  exists ("poll:" `B.append` pollid) >>= \case
-        Left err -> return . Left . ER.Err UserNotExist $ T.pack . show $ err
+        Left err -> return . Left . ER.Err Database $ mempty
         Right verdict ->
-            if verdict then return . Left . ER.Err PollExists $ "This poll already exist " `T.append` pollid_txt
+            if verdict then return . Left . ER.Err PollExists $ pollid_txt
             else do
                 hmset pollid [("recipe",recipe),("startDate",startdate),("isActive",isactive),("authenticateOnly",authenticateonly)]
                 return .  Right . ER.Ok $ "Added poll " `T.append` pollid_txt
@@ -69,30 +70,39 @@ submit (ConfirmToken hash token) =
     in  exists key >>= \case
         Left err -> return . Left . ER.Err Database $ T.pack . show $ err
         Right found ->
-            if not found then return . Left . ER.Err UserNotExist $ "Not email found. Please authenticate again (get a new token) in order to clarify the situation."
+            if not found then return . Left . ER.Err UserNotExist $ decodeUtf8 hash
             else hget key "token" >>= \case
-                Left _ -> return . Left . ER.Err Database $ "Sorry and error occured"
+                Left _ -> return . Left . ER.Err Database $ decodeUtf8 key
                 Right mb_saved_token -> case mb_saved_token of
-                    Nothing -> return . Left . ER.Err UserNotExist $ "Apparently there was no token here. Please authenticate again (ask for a new token). You can use any email address."
+                    Nothing -> return . Left . ER.Err UserNotExist $ decodeUtf8 hash
                     Just saved_token ->
                         if token == saved_token then do
                             hmset key [("verified","true")]
                             return . Right . ER.Ok $ "Thanks, you've successfully confirmed your email address."
-                        else return . Left . ER.Err UserNotExist $ "Sorry, but your token doesn't match our record. Please ask for a new token (authenticate)."
+                        else return . Left . ER.Err UserNotExist $ decodeUtf8 hash
 submit (AnswerPoll hash finger pollid answers) =
     let pollid_txt = decodeUtf8 pollid
     in  hgetall ("poll:" `B.append` pollid) >>= \case
-            Left err -> return . Left .ER.Err UserNotExist $ "Sorry, you cannot participate to a poll that doesn't exists:" `T.append` pollid_txt
+            Left err -> return . Left .ER.Err PollNotExist $ pollid_txt
             Right keys_values -> do
                 let userKey = "user:" `B.append` hash
-                exists userKey >>= \case
-                    Right verdict ->
-                        if not verdict then return . Left . ER.Err UserNotExist $ decodeUtf8 hash
-                        else multiExec ( do
-                            sadd ("participants:" `B.append` pollid) [hash]
-                            set ("answers:" `B.append` pollid `B.append` hash) answers
-                        ) >>= \case TxSuccess _ -> return . Right . ER.Ok $ "Answers submitted successfully!"
-                                    _  -> return . Left . ER.Err Database $ "Unable to insert your answers, as a database error occurred. Please try again (later)."
+                if not $ meetConditions [("active","true")] keys_values then return . Left . ER.Err PollInactive $ pollid_txt
+                else hgetall userKey >>= \case
+                    Left err -> return . Left . ER.Err UserNotExist $ decodeUtf8 hash
+                    Right user_keys ->
+                        if not $ meetConditions [("verified", "true")] user_keys then return . Left . ER.Err UserUnverified $ decodeUtf8 hash
+                        else sismember hash ("participants_hashes:" `B.append` pollid) >>= \case
+                            Left err -> return . Left . ER.Err Database $ mempty
+                            Right verdict ->
+                                if verdict then return . Left . ER.Err PollTakenAlready $ pollid_txt
+                                else multiExec ( do
+                                    sadd ("participants_hashes:" `B.append` pollid) [hash]
+                                    sadd ("participants_fingerprints" `B.append` pollid) [finger]
+                                    set ("answers:" `B.append` pollid `B.append` hash) answers
+                                ) >>= \case TxSuccess _ -> return . Right . ER.Ok $ "Answers submitted successfully!"
+                                            _  -> return . Left . ER.Err Database $ "Database error"
+    where   meetConditions keyvals = all (`elem` keyvals)
+
 
 getPoll :: B.ByteString -> Redis (Either T.Text [[B.ByteString]])
 getPoll pollid =
@@ -101,7 +111,7 @@ getPoll pollid =
         Left err -> return . Left $ T.pack . show $ err
         Right verdict ->
             if not verdict then return . Left $ "Sorry, you cannot participate to a poll that doesn't exists:" `T.append` pollid_txt
-            else smembers ("participants:" `B.append` pollid) >>= \case
+            else smembers ("participants_hashes:" `B.append` pollid) >>= \case
                 Right participants -> do
                     -- must do something about empty participants
                     let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants

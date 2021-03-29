@@ -6,7 +6,6 @@
 {-# LANGUAGE StrictData        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 
-
 module Mailer where
 
 import           AppData
