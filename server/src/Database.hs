@@ -1,6 +1,6 @@
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE GADTs             #-}
-{-# LANGUAGE KindSignatures    #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -21,15 +21,41 @@ import qualified ErrorsReplies          as ER
 
 -- Data types
 
-data Submit (a :: *) where
-    CreatePoll :: B.ByteString  -> B.ByteString -> B.ByteString -> B.ByteString -> B.ByteString -> Submit a
-    ClosePoll :: B.ByteString -> Submit a
-    AskToken :: B.ByteString  -> B.ByteString -> B.ByteString -> Submit a
-    ConfirmToken :: B.ByteString -> B.ByteString -> Submit a
-    AnswerPoll :: B.ByteString -> B.ByteString -> B.ByteString -> B.ByteString -> Submit a
-    deriving (Show, Eq)
+data SubmitPoll = SubmitPoll {
+    create_poll_id        :: B.ByteString,
+    create_poll_recipe    ::  B.ByteString,
+    create_poll_startDate :: B.ByteString,
+    create_poll_active    :: B.ByteString
+}
 
--- Actions
+newtype SubmitClosePoll = SubmitClosePoll { close_poll_id :: B.ByteString }
+
+data SubmitAskToken = SubmitAskToken {
+    ask_has         :: B.ByteString,
+    ask_fingerprint :: B.ByteString,
+    ask_token       :: B.ByteString
+}
+
+data SubmitConfirmToken = SubmitConfirmToken {
+    confirm_hash  :: B.ByteString,
+    confirm_token :: B.ByteString
+}
+
+data SubmitAnswers = SubmitAnswers {
+    answers_hash        :: B.ByteString,
+    answers_fingerprint :: B.ByteString,
+    answers_poll_id     :: B.ByteString,
+    answers_answers     :: B.ByteString
+}
+
+data Submit a where
+    SPoll :: SubmitPoll -> Submit a
+    SClosePoll :: SubmitClosePoll -> Submit a
+    SAskToken :: SubmitAskToken -> Submit a
+    SConfirmToken :: SubmitConfirmToken -> Submit a
+    SAnswerPoll :: SubmitAnswers -> Submit a
+
+-- Requests to database
 
 openConnection :: RedisConfig -> ConnectInfo
 openConnection conf = defaultConnectInfo {
@@ -45,18 +71,18 @@ _connDo :: RedisConfig  -> Redis a -> IO ()
 _connDo config = void . connDo config
 
 submit :: Submit a -> Redis (Either (Err T.Text) (Ok T.Text))
-submit (CreatePoll pollid recipe startdate isactive authenticateonly) =
+submit (SPoll (SubmitPoll pollid recipe startdate isactive)) =
     let pollid_txt = decodeUtf8 pollid
     in  exists ("poll:" `B.append` pollid) >>= \case
         Left err -> return . Left . ER.Err Database $ mempty
         Right verdict ->
             if verdict then return . Left . ER.Err PollExists $ pollid_txt
             else do
-                hmset pollid [("recipe",recipe),("startDate",startdate),("isActive",isactive),("authenticateOnly",authenticateonly)]
+                hmset pollid [("recipe",recipe),("startDate",startdate),("active",isactive)]
                 return .  Right . ER.Ok $ "Added poll " `T.append` pollid_txt
 
-submit (ClosePoll pollid) = return . Right . ER.Ok $ "ok"
-submit (AskToken hash fingerprint token) =
+submit (SClosePoll (SubmitClosePoll pollid)) = return . Right . ER.Ok $ "ok"
+submit (SAskToken (SubmitAskToken hash fingerprint token)) =
     let key = "user:" `B.append` hash
     in  exists key >>= \case
         Left err -> return . Left . ER.Err UserNotExist $ T.pack . show $ err
@@ -65,7 +91,7 @@ submit (AskToken hash fingerprint token) =
             else do
                 hmset key [("fingerprint", fingerprint),("token", token),("verified", "false")]
                 return . Right . ER.Ok $ "Thanks, please check your email"
-submit (ConfirmToken hash token) =
+submit (SConfirmToken (SubmitConfirmToken hash token)) =
     let key = "user:" `B.append` hash
     in  exists key >>= \case
         Left err -> return . Left . ER.Err Database $ T.pack . show $ err
@@ -80,7 +106,7 @@ submit (ConfirmToken hash token) =
                             hmset key [("verified","true")]
                             return . Right . ER.Ok $ "Thanks, you've successfully confirmed your email address."
                         else return . Left . ER.Err UserNotExist $ decodeUtf8 hash
-submit (AnswerPoll hash finger pollid answers) =
+submit (SAnswerPoll (SubmitAnswers hash finger pollid answers)) =
     let pollid_txt = decodeUtf8 pollid
     in  hgetall ("poll:" `B.append` pollid) >>= \case
             Left err -> return . Left .ER.Err PollNotExist $ pollid_txt

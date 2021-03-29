@@ -72,7 +72,7 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_tok
             let poll_encoded = B.concat . BL.toChunks. encode $ poll
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $
-                AnswerPoll (encodeUtf8 hash) (encodeUtf8 finger) (encodeUtf8 . T.pack . show $ pollid) poll_encoded
+                SPoll $ SubmitPoll (encodeUtf8 hash) (encodeUtf8 finger) (encodeUtf8 . T.pack . show $ pollid) poll_encoded
             case res of
                 Left err  -> return . SubmitPartResponse . ER.encodeError $ err
                 Right msg -> return . SubmitPartResponse . ER.encodeOk $ msg
@@ -89,7 +89,7 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_tok
                 sendEmail $ makeSendGridEmail (sendgridconf env) token email
                 return token
             let hashed_b = encodeUtf8 hashed
-                asksubmit = AskToken  hashed_b (encodeUtf8 fingerprint) (encodeUtf8 token)
+                asksubmit = SAskToken $ SubmitAskToken hashed_b (encodeUtf8 fingerprint) (encodeUtf8 token)
             res <- liftIO . connDo (redisconf env) . submit $ asksubmit
             case res of
                 Left err  -> return . AskTokenResponse . ER.encodeError $ err
@@ -97,7 +97,7 @@ server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_tok
 
         confirm_token :: ConfirmTokenRequest -> AppM ConfirmTokenResponse
         confirm_token (ConfirmTokenRequest token hash) = do
-            let confirmsubmit = ConfirmToken (encodeUtf8 hash) (encodeUtf8 token)
+            let confirmsubmit = SConfirmToken $ SubmitConfirmToken (encodeUtf8 hash) (encodeUtf8 token)
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $ confirmsubmit
             case res of
