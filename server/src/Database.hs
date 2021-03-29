@@ -94,13 +94,17 @@ submit (AnswerPoll hash finger pollid answers) =
                         else sismember hash ("participants_hashes:" `B.append` pollid) >>= \case
                             Left err -> return . Left . ER.Err Database $ mempty
                             Right verdict ->
-                                if verdict then return . Left . ER.Err PollTakenAlready $ pollid_txt
-                                else multiExec ( do
-                                    sadd ("participants_hashes:" `B.append` pollid) [hash]
-                                    sadd ("participants_fingerprints" `B.append` pollid) [finger]
-                                    set ("answers:" `B.append` pollid `B.append` hash) answers
-                                ) >>= \case TxSuccess _ -> return . Right . ER.Ok $ "Answers submitted successfully!"
-                                            _  -> return . Left . ER.Err Database $ "Database error"
+                                if not verdict then return . Left . ER.Err PollTakenAlready $ pollid_txt
+                                else sismember hash ("participants_fingerprints:" `B.append` finger) >>= \case
+                                    Left err -> return . Left . ER.Err Database $ mempty
+                                    Right verdict ->
+                                        if not verdict then return . Left . ER.Err PollTakenAlready $ pollid_txt
+                                        else multiExec ( do
+                                            sadd ("participants_hashes:" `B.append` pollid) [hash]
+                                            sadd ("participants_fingerprints" `B.append` pollid) [finger]
+                                            set ("answers:" `B.append` pollid `B.append` hash) answers
+                                        ) >>= \case TxSuccess _ -> return . Right . ER.Ok $ "Answers submitted successfully!"
+                                                    _  -> return . Left . ER.Err Database $ "Database error"
     where   meetConditions keyvals = all (`elem` keyvals)
 
 
