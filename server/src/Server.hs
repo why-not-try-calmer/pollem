@@ -33,76 +33,75 @@ import           Scheduler                   (schedule)
 import           Servant
 
 type API =
-    "submit_create_request" :> ReqBody '[JSON] SubmitCreateRequest :> Post '[JSON] SubmitPartResponse :<|>
-    "submit_close_request":> ReqBody '[JSON] SubmitCloseRequest :> Post '[JSON] SubmitPartResponse :<|>
-    "getpoll" :> QueryParam "id" String :> Get '[JSON] GetPollResponse :<|>
-    "submit_part_request" :> ReqBody '[JSON] SubmitPartRequest :> Post '[JSON] SubmitPartResponse :<|>
-    "ask_token" :> ReqBody '[JSON] AskTokenRequest :> Post '[JSON] AskTokenResponse :<|>
-    "confirm_token" :> ReqBody '[JSON] ConfirmTokenRequest :> Post '[JSON] ConfirmTokenResponse
+    "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespPart :<|>
+    "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespPart :<|>
+    "get" :> QueryParam "id" String :> Get '[JSON] GetPollResponse :<|>
+    "take" :> ReqBody '[JSON] ReqPart :> Post '[JSON] RespPart :<|>
+    "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
+    "confirm_token" :> ReqBody '[JSON] ReqConfirmToken :> Post '[JSON] RespConfirmToken
 
 api :: Proxy API
 api = Proxy
 
 server :: ServerT API AppM
-server = submitCreate :<|> submitClose :<|> getPoll :<|> submitPart :<|> ask_token :<|> confirm_token
+server = create :<|> close :<|> get :<|> participate :<|> ask_token :<|> confirm_token
     where
-        submitCreate :: SubmitCreateRequest -> AppM SubmitPartResponse
-        submitCreate (SubmitCreateRequest cid fp pid pay) = do
+        create :: ReqCreate -> AppM RespPart
+        create (ReqCreate cid fp pid pay) = do
             env <- ask
             let mvar = state env
             liftIO $ do
                 (v, g) <- takeMVar mvar
-                -- incrementing left value with 'last number'; replacing into state
                 putMVar mvar (v+1, g)
                 -- scheduling worker runtime thread to prepare callback upon time limit reached
                 th <- async . schedule . show $ pay
                 -- call `cancel` on th if you want to unschedule the event
                 return ()
-            return (SubmitPartResponse "Thanks for creating this poll. Before we can make it happen, please verify your email using the link sent there.")
+            return (RespPart "Thanks for creating this poll. Before we can make it happen, please verify your email using the link sent there.")
 
-        submitClose :: SubmitCloseRequest -> AppM SubmitPartResponse
-        submitClose SubmitCloseRequest{} = return $ SubmitPartResponse "Thanks for creating this poll."
+        close :: ReqClose -> AppM RespPart
+        close ReqClose{} = return $ RespPart "Thanks for creating this poll."
 
-        getPoll :: Maybe String -> AppM GetPollResponse
-        getPoll (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." initPoll
-        getPoll Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
+        get :: Maybe String -> AppM GetPollResponse
+        get (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." mockPoll
+        get Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
-        submitPart :: SubmitPartRequest -> AppM SubmitPartResponse
-        submitPart (SubmitPartRequest hash finger pollid poll) = do
-            let poll_encoded = B.concat . BL.toChunks. encode $ poll
+        participate :: ReqPart -> AppM RespPart
+        participate (ReqPart hash finger pollid answers) = do
+            let answers_encoded = B.concat . BL.toChunks . encode $ answers
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $
-                SPoll $ SubmitPoll (encodeUtf8 hash) (encodeUtf8 finger) (encodeUtf8 . T.pack . show $ pollid) poll_encoded
+                SPoll (encodeUtf8 hash) (encodeUtf8 finger) (encodeUtf8 . T.pack . show $ pollid) answers_encoded
             case res of
-                Left err  -> return . SubmitPartResponse . ER.encodeError $ err
-                Right msg -> return . SubmitPartResponse . ER.encodeOk $ msg
+                Left err  -> return . RespPart . ER.encodeError $ err
+                Right msg -> return . RespPart . ER.encodeOk $ msg
 
-        ask_token :: AskTokenRequest -> AppM AskTokenResponse
-        ask_token (AskTokenRequest fingerprint email) = do
-            let hashed = hashEmail (encodeUtf8 email)
+        ask_token :: ReqAskToken -> AppM RespAskToken
+        ask_token (ReqAskToken fingerprint email) = do
             env <- ask
             let mvar = state env
+                hashed = hashEmail (encodeUtf8 email)
+                hashed_b = encodeUtf8 hashed
             token <- liftIO $ do
                 (n, gen) <- takeMVar mvar
                 token <- createToken gen (encodeUtf8 email)
                 putMVar mvar (n, gen)
                 sendEmail $ makeSendGridEmail (sendgridconf env) token email
                 return token
-            let hashed_b = encodeUtf8 hashed
-                asksubmit = SAskToken $ SubmitAskToken hashed_b (encodeUtf8 fingerprint) (encodeUtf8 token)
+            let asksubmit = SAsk hashed_b (encodeUtf8 fingerprint) (encodeUtf8 token)
             res <- liftIO . connDo (redisconf env) . submit $ asksubmit
             case res of
-                Left err  -> return . AskTokenResponse . ER.encodeError $ err
-                Right msg -> return . AskTokenResponse . ER.encodeOk $ msg
+                Left err  -> return . RespAskToken . ER.encodeError $ err
+                Right msg -> return . RespAskToken . ER.encodeOk $ msg
 
-        confirm_token :: ConfirmTokenRequest -> AppM ConfirmTokenResponse
-        confirm_token (ConfirmTokenRequest token hash) = do
-            let confirmsubmit = SConfirmToken $ SubmitConfirmToken (encodeUtf8 hash) (encodeUtf8 token)
+        confirm_token :: ReqConfirmToken -> AppM RespConfirmToken
+        confirm_token (ReqConfirmToken token hash) = do
+            let confirmsubmit = SConfirm (encodeUtf8 hash) (encodeUtf8 token)
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $ confirmsubmit
             case res of
-                Left err -> return . ConfirmTokenResponse . ER.encodeError $ err
-                Right msg -> return . ConfirmTokenResponse . ER.encodeOk $ msg
+                Left err  -> return . RespConfirmToken . ER.encodeError $ err
+                Right msg -> return . RespConfirmToken . ER.encodeOk $ msg
 
 
 newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }

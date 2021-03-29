@@ -16,12 +16,16 @@ import           Data.Aeson.TH
 import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8)
 import           Network.HTTP.Req
+--
 
+{-- Mailer types  --}
+
+--
 data Content = Content {
    _type  :: T.Text ,
    _value :: T.Text
 }
--- $(deriveJSON defaultOptions ''Content)
+-- $(deriveJSON defaultOptions ''Content)1
 
 instance ToJSON Content where
    toJSON Content{..} =
@@ -73,7 +77,11 @@ data SendGridEmail = SendGridEmail {
    header  :: Header,
    payload :: Email
 }
+--
 
+{-- Mailer functions  --}
+
+--
 makeSendGridEmail :: SendGridConfig -> T.Text -> T.Text  -> SendGridEmail
 makeSendGridEmail (SendGridBearer bearer) token email =
    let   email_header = oAuth2Bearer bearer

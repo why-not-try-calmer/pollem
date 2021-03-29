@@ -18,12 +18,9 @@ import           Data.Aeson.TH
 import qualified Data.ByteString            as B
 import qualified Data.Map                   as M
 import qualified Data.Text                  as T
-
 --
 
-
 {- Requests -}
-
 
 --
 data Poll = Poll {
@@ -41,48 +38,46 @@ data Poll = Poll {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Poll)
 
-data SubmitPartRequest = SubmitPartRequest {
+data ReqPart = ReqPart {
     part_clientId          :: T.Text,
     part_clientFingerPrint :: T.Text,
     part_clientPollId      :: Int,
-    part_poll              :: Poll
+    part_answers           :: [Int]
 } deriving (Eq, Show)
-$(deriveJSON defaultOptions ''SubmitPartRequest)
+$(deriveJSON defaultOptions ''ReqPart)
 
-data SubmitCreateRequest = SubmitCreateRequest {
+data ReqCreate = ReqCreate {
     create_clientId          :: Int,
     create_clientFingerPrint :: T.Text ,
     create_clientPollId      :: Int,
     create_payload           :: T.Text
 } deriving (Eq, Show)
-$(deriveJSON defaultOptions ''SubmitCreateRequest)
+$(deriveJSON defaultOptions ''ReqCreate)
 
-data SubmitCloseRequest = SubmitCloseRequest {
+data ReqClose = ReqClose {
     close_reason       :: String,
     close_clientPollId :: Int
 } deriving (Eq, Show)
-$(deriveJSON defaultOptions ''SubmitCloseRequest)
+$(deriveJSON defaultOptions ''ReqClose)
 
-data AskTokenRequest = AskTokenRequest {
+data ReqAskToken = ReqAskToken {
     user_fingerprint :: T.Text,
     user_email       :: T.Text
 }
-$(deriveJSON defaultOptions ''AskTokenRequest)
+$(deriveJSON defaultOptions ''ReqAskToken)
 
-data ConfirmTokenRequest = ConfirmTokenRequest {
+data ReqConfirmToken = ReqConfirmToken {
     user_confirm_token :: T.Text,
     user_confirm_hash  :: T.Text
 }
-$(deriveJSON defaultOptions ''ConfirmTokenRequest)
+$(deriveJSON defaultOptions ''ReqConfirmToken)
 --
-
 
 {- Responses -}
 
-
 --
-newtype SubmitPartResponse = SubmitPartResponse { msg :: T.Text } deriving (Eq, Show)
-$(deriveJSON defaultOptions ''SubmitPartResponse)
+newtype RespPart = RespPart { msg :: T.Text } deriving (Eq, Show)
+$(deriveJSON defaultOptions ''RespPart)
 
 data GetPollResponse = GetPollResponse {
     get_poll_msg :: T.Text ,
@@ -90,16 +85,14 @@ data GetPollResponse = GetPollResponse {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''GetPollResponse)
 
-newtype AskTokenResponse = AskTokenResponse T.Text
-$(deriveJSON defaultOptions ''AskTokenResponse)
+newtype RespAskToken = RespAskToken T.Text
+$(deriveJSON defaultOptions ''RespAskToken)
 
-newtype ConfirmTokenResponse = ConfirmTokenResponse T.Text
-$(deriveJSON defaultOptions ''ConfirmTokenResponse)
+newtype RespConfirmToken = RespConfirmToken T.Text
+$(deriveJSON defaultOptions ''RespConfirmToken)
 --
 
-
 {- App initialization & types -}
-
 
 --
 newtype SendGridConfig = SendGridBearer { bearer :: B.ByteString }
@@ -126,8 +119,8 @@ data Config = Config {
     state        :: State
 }
 
-initPoll :: Maybe Poll
-initPoll = Just Poll {
+mockPoll :: Maybe Poll
+mockPoll = Just Poll {
         poll_question = "A question",
         poll_description = "A description",
         poll_startDate = "2021-03-14T14:15:14+01:00",
@@ -147,12 +140,9 @@ initState :: IO State
 initState = do
     drg <- getSystemDRG
     newMVar (0, drg)
-
 --
 
-
 {- Token -}
-
 
 --
 createToken :: Monad m => SystemDRG -> B.ByteString -> m T.Text

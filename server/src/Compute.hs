@@ -1,14 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Compute where
-import           Data.Foldable (foldl')
 import           Data.List     (transpose)
 import qualified Data.Text     as T
+import           ErrorsReplies
+import qualified ErrorsReplies          as ER
 
-addAll :: (Num a, Eq a) => [[a]] -> Either T.Text [a]
-addAll [] = Left "Empty list. Borked data probably."
-addAll [x] = Right x
-addAll ls =
+collect :: (Num a, Eq a) => [[a]] -> Either (ER.Err T.Text ) [a]
+collect [] = Left . ER.Err BorkedData $ mempty
+collect [x] = Right x
+collect ls =
     let (x:xs) = ls
-    in  if any (/= x) xs then Left "Empty list. Borked data probably."
-        else Right $ map sum . transpose $ ls
+    in  if any (/= x) xs then Left . ER.Err BorkedData $ mempty
+        else Right . map sum . transpose $ ls

@@ -10,7 +10,7 @@ import           AppData
 import           Compute
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
-import           Data.Aeson.Extra       (encodeStrict)
+import           Data.Aeson.Extra       (encodeStrict, decodeStrict')
 import qualified Data.ByteString        as B
 import           Data.Foldable          (foldl', traverse_)
 import qualified Data.Text              as T
@@ -18,13 +18,11 @@ import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
 import           Database.Redis
 import           ErrorsReplies
 import qualified ErrorsReplies          as ER
-
 --
 
 {-- Requests to db: types --}
 
 --
-
 data DbReq =
     SPoll {
         create_poll_id        :: B.ByteString,
@@ -47,7 +45,8 @@ data DbReq =
         answers_fingerprint :: B.ByteString,
         answers_poll_id     :: B.ByteString,
         answers_answers     :: B.ByteString
-    }
+    } |
+    SGet { get_poll_id :: B.ByteString }
 --
 
 {-- Requests to db: functions --}
@@ -104,74 +103,46 @@ submit (SConfirm hash token) =
                         else return . Left . ER.Err UserNotExist $ decodeUtf8 hash
 submit (SAnswer hash finger pollid answers) =
     let pollid_txt = decodeUtf8 pollid
-    in  hgetall ("poll:" `B.append` pollid) >>= \case
-            Left err -> return . Left .ER.Err PollNotExist $ pollid_txt
-            Right keys_values -> do
-                let userKey = "user:" `B.append` hash
-                if not $ meetConditions [("active","true")] keys_values then return . Left . ER.Err PollInactive $ pollid_txt
-                else hgetall userKey >>= \case
-                    Left err -> return . Left . ER.Err UserNotExist $ decodeUtf8 hash
-                    Right user_keys ->
-                        if not $ meetConditions [("verified", "true")] user_keys then return . Left . ER.Err UserUnverified $ decodeUtf8 hash
-                        else sismember hash ("participants_hashes:" `B.append` pollid) >>= \case
-                            Left err -> return . Left . ER.Err Database $ mempty
-                            Right verdict ->
-                                if not verdict then return . Left . ER.Err PollTakenAlready $ pollid_txt
-                                else sismember hash ("participants_fingerprints:" `B.append` finger) >>= \case
-                                    Left err -> return . Left . ER.Err Database $ mempty
-                                    Right verdict ->
-                                        if not verdict then return . Left . ER.Err PollTakenAlready $ pollid_txt
-                                        else multiExec ( do
-                                            sadd ("participants_hashes:" `B.append` pollid) [hash]
-                                            sadd ("participants_fingerprints" `B.append` pollid) [finger]
-                                            set ("answers:" `B.append` pollid `B.append` hash) answers
-                                        ) >>= \case TxSuccess _ -> return . Right . ER.Ok $ "Answers submitted successfully!"
-                                                    _  -> return . Left . ER.Err Database $ "Database error"
-    where   meetConditions keyvals = all (`elem` keyvals)
+        userKey = "user:" `B.append` hash
+    in  multiExec ( do
+            polldata <- hgetall ("poll:" `B.append` pollid)
+            userdata <- hgetall userKey
+            ismemberH <- sismember hash ("participants_hashes:" `B.append` pollid)
+            ismemberF <- sismember hash ("participants_fingerprints:" `B.append` finger)
+            return $ (,,,) <$> polldata <*> userdata <*> ismemberH <*> ismemberF
+        ) >>= \case TxSuccess (pdata, udata, isH, isF) -> 
+                        if not $ meetConditions [("active","true")] pdata then return . Left . ER.Err PollInactive $ pollid_txt else
+                        if not $ meetConditions [("verified", "true")] udata then return . Left . ER.Err UserUnverified $ decodeUtf8 hash else
+                        if not isF || not isH then return . Left . ER.Err PollTakenAlready $ pollid_txt
+                        else multiExec ( do
+                            sadd ("participants_hashes:" `B.append` pollid) [hash]
+                            sadd ("participants_fingerprints" `B.append` pollid) [finger]
+                            set ("answers:" `B.append` pollid `B.append` hash) answers
+                        ) >>= \case TxSuccess _ -> return . Right . ER.Ok $ "Answers submitted successfully!"
+                                    _  -> return . Left . ER.Err Database $ "Database error"
+                    _   -> return . Left . ER.Err Database $ "User or poll data missing."
+        where   meetConditions keyvals = all (`elem` keyvals)
 
-submit' (SAnswer hash finger pollid answers) =
-    let pollid_txt = decodeUtf8 pollid
-    in  hgetall ("poll:" `B.append` pollid) >>= \case
-            Left err -> return . Left .ER.Err PollNotExist $ pollid_txt
-            Right keys_values -> do
-                let userKey = "user:" `B.append` hash
-                if not $ meetConditions [("active","true")] keys_values then return . Left . ER.Err PollInactive $ pollid_txt
-                else hgetall userKey >>= \case
-                    Left err -> return . Left . ER.Err UserNotExist $ decodeUtf8 hash
-                    Right user_keys ->
-                        if not $ meetConditions [("verified", "true")] user_keys then return . Left . ER.Err UserUnverified $ decodeUtf8 hash
-                        else sismember hash ("participants_hashes:" `B.append` pollid) >>= \case
-                            Left err -> return . Left . ER.Err Database $ mempty
-                            Right verdict ->
-                                if not verdict then return . Left . ER.Err PollTakenAlready $ pollid_txt
-                                else sismember hash ("participants_fingerprints:" `B.append` finger) >>= \case
-                                    Left err -> return . Left . ER.Err Database $ mempty
-                                    Right verdict ->
-                                        if not verdict then return . Left . ER.Err PollTakenAlready $ pollid_txt
-                                        else multiExec ( do
-                                            sadd ("participants_hashes:" `B.append` pollid) [hash]
-                                            sadd ("participants_fingerprints" `B.append` pollid) [finger]
-                                            set ("answers:" `B.append` pollid `B.append` hash) answers
-                                        ) >>= \case TxSuccess _ -> return . Right . ER.Ok $ "Answers submitted successfully!"
-                                                    _  -> return . Left . ER.Err Database $ "Database error"
-    where   meetConditions keyvals = all (`elem` keyvals)
-
-
-getPoll :: B.ByteString -> Redis (Either T.Text [[B.ByteString]])
-getPoll pollid =
+getPoll :: DbReq -> Redis (Either (Err T.Text) (Maybe Poll))
+getPoll (SGet pollid) =    
     let pollid_txt = decodeUtf8 pollid
     in  exists ("poll:" `B.append` pollid) >>= \case
-        Left err -> return . Left $ T.pack . show $ err
+        Left err -> return . Left . ER.Err Database $ mempty 
         Right verdict ->
-            if not verdict then return . Left $ "Sorry, you cannot participate to a poll that doesn't exists:" `T.append` pollid_txt
+            if not verdict then return . Left . ER.Err PollNotExist $ pollid_txt
             else smembers ("participants_hashes:" `B.append` pollid) >>= \case
-                Right participants -> do
+                Right participants ->
                     -- must do something about empty participants
                     let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
-                    multiExec collectAnswers >>=
-                        \case
-                            TxError _ -> return . Left $ "An error happened, please try again."
-                            TxSuccess res  -> return $ Right res
+                    in  multiExec collectAnswers >>= \case
+                        TxError _ -> return . Left . ER.Err Database $ mempty 
+                        TxSuccess res  -> do
+                            let mb_decoded = sequence $ traverse decode_one <$> res 
+                            case mb_decoded of
+                                Just answers -> case collect . head $ answers of
+                                    Right collected -> return . Right $ mockPoll 
     where   getAnswers p pollid = do
                 let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
                 lrange key 0 (-1)
+            decode_one x = decodeStrict' x :: Maybe [Int]
+                            
