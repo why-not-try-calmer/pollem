@@ -11,5 +11,5 @@ collect [] = Left . ER.Err BorkedData $ mempty
 collect [x] = Right x
 collect ls =
     let (x:xs) = ls
-    in  if any (/= x) xs then Left . ER.Err BorkedData $ mempty
+    in  if any (\x' -> length x /= length x) xs then Left . ER.Err BorkedData $ mempty 
         else Right . map sum . transpose $ ls

@@ -114,12 +114,8 @@ submit (SAnswer hash finger pollid answers) =
             ismemberF <- sismember hash ("participants_fingerprints:" `B.append` finger)
             return $ (,,,) <$> polldata <*> userdata <*> ismemberH <*> ismemberF
         ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
-                        if not $ meetConditions pdata [("active","true")] then do
-                            liftIO . print $ pdata
-                            return . Left . ER.Err PollInactive $ pollid_txt else
-                        if not $ meetConditions udata [("verified", "true")] then do
-                            liftIO . print $ udata
-                            return . Left . ER.Err UserUnverified $ decodeUtf8 hash else
+                        if not $ meetConditions pdata [("active","true")] then return . Left . ER.Err PollInactive $ pollid_txt else
+                        if not $ meetConditions udata [("verified", "true")] then return . Left . ER.Err UserUnverified $ decodeUtf8 hash else
                         if isF || isH then return . Left . ER.Err PollTakenAlready $ pollid_txt
                         else multiExec ( do
                             sadd ("participants_hashes:" `B.append` pollid) [hash]
@@ -149,7 +145,8 @@ getPoll (SGet pollid) =
                         TxSuccess (res, poll_raw)  ->
                             let mb_decoded = sequence $ foldr decodeByteList [] res
                             in  case mb_decoded of
-                                Just answers -> case collect answers of
+                                Just answers ->
+                                    case collect answers of
                                     Left err -> return . Left $ err
                                     Right collected ->
                                         let poll_metadata = M.fromList poll_raw
@@ -168,18 +165,21 @@ getPoll (SGet pollid) =
 
 mockSetStageGetPoll =
     let token = "23232"
-        hash = "lklsdklsk"
-        fingerprint = "223322"
+        hash1 = "lklsdklsk"
+        hash2 = "lslsls"
+        fingerprint1 = "223322"
+        fingerprint2 = "11222lkslk"
         poll = mockPoll
-        answers = ["0","1","1","0","0"]
+        answers1 = ["0","1","1","0","0"]
+        answers2 = ["0","0","1","1","1"]
         pollid = "1"
         recipe = encodeStrict poll
         isactive = "true"
         date_now d = encodeUtf8 . T.pack . show $ d
         actions now = do
-            -- hmset ("user:" `B.append` hash) [("fingerprint", fingerprint),("token", token),("verified", "true")]
+            -- hmset ("user:" `B.append` hash2) [("fingerprint", fingerprint2),("token", token),("verified", "true")]
             -- submit $ SPoll pollid recipe now isactive
-            -- submit $ SAnswer hash fingerprint pollid answers
+            -- submit $ SAnswer hash2 fingerprint2 pollid answers2
             getPoll . SGet $ pollid
     in  getNow >>= \now -> connDo initRedisConfig $ actions (date_now now) >>= \case
             Left err -> liftIO . print . renderError $ err
