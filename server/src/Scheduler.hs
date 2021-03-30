@@ -1,4 +1,4 @@
-module Scheduler (schedule) where
+module Scheduler where
 
 import           Control.Concurrent       (threadDelay)
 import           Data.Time                (ZonedTime, defaultTimeLocale,
@@ -38,5 +38,7 @@ schedule s = case isoOrCustom s of
                 print $ "Scheduled for in " ++ show secs ++ " seconds"
                 threadDelay micros
                 print "Finished."
+
+getNow = getCurrentTime
 
 -- main = schedule "2021-03-14T14:15:14+01:00"

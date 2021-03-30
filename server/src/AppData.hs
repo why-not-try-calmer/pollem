@@ -49,8 +49,7 @@ $(deriveJSON defaultOptions ''ReqPart)
 data ReqCreate = ReqCreate {
     create_clientId          :: Int,
     create_clientFingerPrint :: T.Text ,
-    create_clientPollId      :: Int,
-    create_payload           :: T.Text
+    create_recipe            :: T.Text
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqCreate)
 

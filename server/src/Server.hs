@@ -29,8 +29,9 @@ import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
-import           Scheduler                   (schedule)
+import           Scheduler                   (schedule, getNow)
 import           Servant
+import Data.Aeson.Extra (encodeStrict)
 
 type API =
     "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespPart :<|>
@@ -47,17 +48,19 @@ server :: ServerT API AppM
 server = create :<|> close :<|> get :<|> participate :<|> ask_token :<|> confirm_token
     where
         create :: ReqCreate -> AppM RespPart
-        create (ReqCreate cid fp pid pay) = do
+        create (ReqCreate hash _ recipe) = do
             env <- ask
-            let mvar = state env
             liftIO $ do
-                (v, g) <- takeMVar mvar
-                putMVar mvar (v+1, g)
-                -- scheduling worker runtime thread to prepare callback upon time limit reached
-                th <- async . schedule . show $ pay
-                -- call `cancel` on th if you want to unschedule the event
-                return ()
-            return (RespPart "Thanks for creating this poll. Before we can make it happen, please verify your email using the link sent there.")
+                (v, g) <- takeMVar $ state env
+                let pollid = encodeStrict (v+1)
+                now <- getNow
+                res <- connDo (redisconf env) . submit $ SPoll pollid (encodeStrict recipe) (encodeStrict . show $ now) "true"
+                putMVar (state env) (v+1, g)
+                case res of 
+                    Left err -> return . RespPart . ER.encodeError $ err
+                    Right ok -> return $ RespPart $
+                        "Thanks for creating this poll! You can follow the results as they come using this id"
+                            `T.append` (T.pack . show $ v+1)
 
         close :: ReqClose -> AppM RespPart
         close ReqClose{} = return $ RespPart "Thanks for creating this poll."
