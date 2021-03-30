@@ -10,7 +10,7 @@ import           AppData
 import           Compute
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
-import           Data.Aeson.Extra       (decodeStrict', encodeStrict)
+import           Data.Aeson.Extra       (decodeStrict', encodeStrict, decodeStrict)
 import qualified Data.ByteString        as B
 import           Data.Foldable          (foldl', traverse_)
 import qualified Data.Map               as M
@@ -19,6 +19,7 @@ import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
 import           Database.Redis
 import           ErrorsReplies
 import qualified ErrorsReplies          as ER
+import Scheduler (getNow)
 --
 
 {-- Requests to db: types --}
@@ -45,7 +46,7 @@ data DbReq =
         answers_hash        :: B.ByteString,
         answers_fingerprint :: B.ByteString,
         answers_poll_id     :: B.ByteString,
-        answers_answers     :: B.ByteString
+        answers_answers     :: [B.ByteString]
     } |
     SGet { get_poll_id :: B.ByteString }
 --
@@ -74,7 +75,7 @@ submit (SPoll pollid recipe startdate isactive) =
         Right verdict ->
             if verdict then return . Left . ER.Err PollExists $ pollid_txt
             else do
-                hmset pollid [("recipe",recipe),("startDate",startdate),("active",isactive)] -- this structure is not typed! perhaps do it
+                hmset ("poll:" `B.append` pollid) [("recipe",recipe),("startDate",startdate),("active",isactive)] -- this structure is not typed! perhaps do it
                 return .  Right . ER.Ok $ "Added poll " `T.append` pollid_txt
 
 submit (SClose pollid) = return . Right . ER.Ok $ "ok"
@@ -112,13 +113,17 @@ submit (SAnswer hash finger pollid answers) =
             ismemberF <- sismember hash ("participants_fingerprints:" `B.append` finger)
             return $ (,,,) <$> polldata <*> userdata <*> ismemberH <*> ismemberF
         ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
-                        if not $ meetConditions [("active","true")] pdata then return . Left . ER.Err PollInactive $ pollid_txt else
-                        if not $ meetConditions [("verified", "true")] udata then return . Left . ER.Err UserUnverified $ decodeUtf8 hash else
-                        if not isF || not isH then return . Left . ER.Err PollTakenAlready $ pollid_txt
+                        if not $ meetConditions pdata [("active","true")] then do
+                            liftIO . print $ pdata
+                            return . Left . ER.Err PollInactive $ pollid_txt else
+                        if not $ meetConditions udata [("verified", "true")] then do
+                            liftIO . print $ udata
+                            return . Left . ER.Err UserUnverified $ decodeUtf8 hash else
+                        if isF || isH then return . Left . ER.Err PollTakenAlready $ pollid_txt
                         else multiExec ( do
                             sadd ("participants_hashes:" `B.append` pollid) [hash]
-                            sadd ("participants_fingerprints" `B.append` pollid) [finger]
-                            set ("answers:" `B.append` pollid `B.append` hash) answers
+                            sadd ("participants_fingerprints:" `B.append` pollid) [finger]
+                            lpush ("answers:" `B.append` pollid `B.append` ":" `B.append` hash) answers
                         ) >>= \case TxSuccess _ -> return . Right . ER.Ok $ "Answers submitted successfully!"
                                     _  -> return . Left . ER.Err Database $ "Database error"
                     _   -> return . Left . ER.Err Database $ "User or poll data missing."
@@ -132,28 +137,55 @@ getPoll (SGet pollid) =
         Right verdict ->
             if not verdict then return . Left . ER.Err PollNotExist $ pollid_txt
             else smembers ("participants_hashes:" `B.append` pollid) >>= \case
-                Right participants ->
+                Right participants -> do
                     let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
-                    in multiExec ( do
+                    multiExec ( do
                         answers <- collectAnswers
-                        poll_meta_data <- hgetall pollid
+                        poll_meta_data <- hgetall ("poll:" `B.append` pollid)
                         return $ (,) <$> answers <*> poll_meta_data
                         ) >>= \case
                         TxError _ -> dbErr
                         TxSuccess (res, poll_raw)  ->
-                            let mb_decoded = sequence . foldl' (\a v -> map decodeStrict' v) [] $ res :: Maybe [[Int]]
+                            let mb_decoded = sequence . foldr decodeByteList [] $ res :: Maybe [[Int]]
+                            -- mb_decoded = sequence $ foldr decodeByteList [] res
+                                x = map (map show) res :: [[String]]
                             in  case mb_decoded of
                                 Just answers -> case collect answers of
+                                    Left err -> return . Left $ err
                                     Right collected ->
                                         let poll_metadata = M.fromList poll_raw
                                         in  case M.lookup "recipe" poll_metadata of
-                                            Nothing -> borked pollid_txt
+                                            Nothing -> borked
                                             Just recipe -> case decodeStrict' recipe :: Maybe Poll of
-                                                Nothing -> borked pollid_txt
+                                                Nothing -> borked
                                                 Just poll -> return . Right $ poll
-                                Nothing -> borked pollid_txt
+                                Nothing -> do
+                                    liftIO . print . show $ x
+                                    borked
     where   dbErr = return . Left . ER.Err Database $ mempty
-            borked s = return . Left . ER.Err BorkedData $ s
+            borked = return . Left . ER.Err BorkedData $ mempty 
             getAnswers p pollid =
                 let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
                 in  lrange key 0 (-1)
+            decodeByteList val acc = acc <> map decodeStrict' val
+
+mockSetStageGetPoll =
+    let token = "23232"
+        hash = "lklsdklsk"
+        fingerprint = "223322"
+        poll = mockPoll
+        answers = ["0","1","1","0","0"]
+        pollid = "1"
+        recipe = encodeStrict poll
+        isactive = "true"
+        date_now d = encodeUtf8 . T.pack . show $ d
+        actions now = do
+            -- hmset ("user:" `B.append` hash) [("fingerprint", fingerprint),("token", token),("verified", "true")]
+            -- submit $ SPoll pollid recipe now isactive
+            -- submit $ SAnswer hash fingerprint pollid answers
+            getPoll . SGet $ pollid
+    in  getNow >>= \now -> connDo initRedisConfig $ actions (date_now now) >>= \case
+            Left err -> liftIO . print . renderError $ err
+            Right res -> liftIO . print . show $ res
+
+main = mockSetStageGetPoll

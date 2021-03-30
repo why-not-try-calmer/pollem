@@ -31,8 +31,8 @@ data Poll = Poll {
     poll_id                  :: Int,
     poll_multiple            :: Bool,
     poll_visible             :: Bool,
-    poll_answers             :: M.Map T.Text T.Text,
-    poll_other_answers       :: Maybe (M.Map T.Text T.Text),
+    poll_answers             :: [T.Text],
+    poll_other_answers       :: Maybe [T.Text],
     poll_creator_fingerprint :: T.Text,
     poll_creator_token       :: T.Text
 } deriving (Eq, Show)
@@ -118,8 +118,8 @@ data Config = Config {
     state        :: State
 }
 
-mockPoll :: Maybe Poll
-mockPoll = Just Poll {
+mockPoll :: Poll
+mockPoll = Poll {
         poll_question = "A question",
         poll_description = "A description",
         poll_startDate = "2021-03-14T14:15:14+01:00",
@@ -127,8 +127,8 @@ mockPoll = Just Poll {
         poll_id = 42,
         poll_multiple = True,
         poll_visible = True,
-        poll_answers = M.fromList [("1", "First")],
-        poll_other_answers = Just . M.fromList $ [("opt1", "First optional")],
+        poll_answers = ["First", "Second", "Third"],
+        poll_other_answers = Just ["OptFourth", "OptFifth"],
         poll_creator_fingerprint = "0x01",
         poll_creator_token = "lksdlksodi"
     }

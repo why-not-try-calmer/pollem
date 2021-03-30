@@ -57,7 +57,7 @@ server = create :<|> close :<|> get :<|> participate :<|> ask_token :<|> confirm
                 res <- connDo (redisconf env) . submit $ SPoll pollid (encodeStrict recipe) (encodeStrict . show $ now) "true"
                 putMVar (state env) (v+1, g)
                 case res of 
-                    Left err -> return . RespPart . ER.encodeError $ err
+                    Left err -> return . RespPart . ER.renderError $ err
                     Right ok -> return $ RespPart $
                         "Thanks for creating this poll! You can follow the results as they come using this id"
                             `T.append` (T.pack . show $ v+1)
@@ -66,7 +66,7 @@ server = create :<|> close :<|> get :<|> participate :<|> ask_token :<|> confirm
         close ReqClose{} = return $ RespPart "Thanks for creating this poll."
 
         get :: Maybe String -> AppM GetPollResponse
-        get (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." mockPoll
+        get (Just i) = return $ GetPollResponse "Thanks for asking. Here is your poll data." . Just $ mockPoll
         get Nothing = return $ GetPollResponse "Unable to find a poll with this id." Nothing
 
         participate :: ReqPart -> AppM RespPart
@@ -76,8 +76,8 @@ server = create :<|> close :<|> get :<|> participate :<|> ask_token :<|> confirm
             res <- liftIO . connDo (redisconf env) . submit $
                 SPoll (encodeUtf8 hash) (encodeUtf8 finger) (encodeUtf8 . T.pack . show $ pollid) answers_encoded
             case res of
-                Left err  -> return . RespPart . ER.encodeError $ err
-                Right msg -> return . RespPart . ER.encodeOk $ msg
+                Left err  -> return . RespPart . ER.renderError $ err
+                Right msg -> return . RespPart . ER.renderOk $ msg
 
         ask_token :: ReqAskToken -> AppM RespAskToken
         ask_token (ReqAskToken fingerprint email) = do
@@ -94,8 +94,8 @@ server = create :<|> close :<|> get :<|> participate :<|> ask_token :<|> confirm
             let asksubmit = SAsk hashed_b (encodeUtf8 fingerprint) (encodeUtf8 token)
             res <- liftIO . connDo (redisconf env) . submit $ asksubmit
             case res of
-                Left err  -> return . RespAskToken . ER.encodeError $ err
-                Right msg -> return . RespAskToken . ER.encodeOk $ msg
+                Left err  -> return . RespAskToken . ER.renderError $ err
+                Right msg -> return . RespAskToken . ER.renderOk $ msg
 
         confirm_token :: ReqConfirmToken -> AppM RespConfirmToken
         confirm_token (ReqConfirmToken token hash) = do
@@ -103,8 +103,8 @@ server = create :<|> close :<|> get :<|> participate :<|> ask_token :<|> confirm
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $ confirmsubmit
             case res of
-                Left err  -> return . RespConfirmToken . ER.encodeError $ err
-                Right msg -> return . RespConfirmToken . ER.encodeOk $ msg
+                Left err  -> return . RespConfirmToken . ER.renderError $ err
+                Right msg -> return . RespConfirmToken . ER.renderOk $ msg
 
 
 newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }
