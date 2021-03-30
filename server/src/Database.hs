@@ -10,8 +10,10 @@ import           AppData
 import           Compute
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
-import           Data.Aeson.Extra       (decodeStrict', encodeStrict, decodeStrict)
+import           Data.Aeson.Extra       (decodeStrict, decodeStrict',
+                                         encodeStrict)
 import qualified Data.ByteString        as B
+import           Data.ByteString.Char8  (readInt)
 import           Data.Foldable          (foldl', traverse_)
 import qualified Data.Map               as M
 import qualified Data.Text              as T
@@ -19,8 +21,7 @@ import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
 import           Database.Redis
 import           ErrorsReplies
 import qualified ErrorsReplies          as ER
-import Scheduler (getNow)
-import Data.ByteString.Char8 (readInt)
+import           Scheduler              (getNow)
 --
 
 {-- Requests to db: types --}
@@ -142,7 +143,7 @@ getPoll (SGet pollid) =
                             return $ (,) <$> answers <*> poll_meta_data
                         ) >>= \case
                         TxError _ -> dbErr
-                        TxSuccess (res, poll_raw)  ->
+                        TxSuccess (res, poll_raw) ->
                             let mb_decoded = sequence $ foldr decodeByteList [] res
                             in  case mb_decoded of
                                 Just answers ->
@@ -154,10 +155,10 @@ getPoll (SGet pollid) =
                                             Nothing -> borked
                                             Just recipe -> case decodeStrict' recipe :: Maybe Poll of
                                                 Nothing -> borked
-                                                Just poll -> return . Right $ (poll, collected)
+                                                Just poll -> return . Right $ (poll, reverse collected)
                                 Nothing -> borked
     where   dbErr = return . Left . ER.Err Database $ mempty
-            borked = return . Left . ER.Err BorkedData $ mempty 
+            borked = return . Left . ER.Err BorkedData $ mempty
             getAnswers p pollid =
                 let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
                 in  lrange key 0 (-1)
@@ -182,7 +183,7 @@ mockSetStageGetPoll =
             -- submit $ SAnswer hash2 fingerprint2 pollid answers2
             getPoll . SGet $ pollid
     in  getNow >>= \now -> connDo initRedisConfig $ actions (date_now now) >>= \case
-            Left err -> liftIO . print . renderError $ err
+            Left err  -> liftIO . print . renderError $ err
             Right res -> liftIO . print . show $ res
 
 main = mockSetStageGetPoll
