@@ -20,6 +20,7 @@ import           Database.Redis
 import           ErrorsReplies
 import qualified ErrorsReplies          as ER
 import Scheduler (getNow)
+import Data.ByteString.Char8 (readInt)
 --
 
 {-- Requests to db: types --}
@@ -129,7 +130,7 @@ submit (SAnswer hash finger pollid answers) =
                     _   -> return . Left . ER.Err Database $ "User or poll data missing."
         where   meetConditions keyvals = all (`elem` keyvals)
 
-getPoll :: DbReq -> Redis (Either (Err T.Text) Poll)
+getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, [Int]))
 getPoll (SGet pollid) =
     let pollid_txt = decodeUtf8 pollid
     in  exists ("poll:" `B.append` pollid) >>= \case
@@ -137,18 +138,16 @@ getPoll (SGet pollid) =
         Right verdict ->
             if not verdict then return . Left . ER.Err PollNotExist $ pollid_txt
             else smembers ("participants_hashes:" `B.append` pollid) >>= \case
-                Right participants -> do
+                Right participants ->
                     let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
-                    multiExec ( do
-                        answers <- collectAnswers
-                        poll_meta_data <- hgetall ("poll:" `B.append` pollid)
-                        return $ (,) <$> answers <*> poll_meta_data
+                    in  multiExec ( do
+                            answers <- collectAnswers
+                            poll_meta_data <- hgetall ("poll:" `B.append` pollid)
+                            return $ (,) <$> answers <*> poll_meta_data
                         ) >>= \case
                         TxError _ -> dbErr
                         TxSuccess (res, poll_raw)  ->
-                            let mb_decoded = sequence . foldr decodeByteList [] $ res :: Maybe [[Int]]
-                            -- mb_decoded = sequence $ foldr decodeByteList [] res
-                                x = map (map show) res :: [[String]]
+                            let mb_decoded = sequence $ foldr decodeByteList [] res
                             in  case mb_decoded of
                                 Just answers -> case collect answers of
                                     Left err -> return . Left $ err
@@ -158,16 +157,14 @@ getPoll (SGet pollid) =
                                             Nothing -> borked
                                             Just recipe -> case decodeStrict' recipe :: Maybe Poll of
                                                 Nothing -> borked
-                                                Just poll -> return . Right $ poll
-                                Nothing -> do
-                                    liftIO . print . show $ x
-                                    borked
+                                                Just poll -> return . Right $ (poll, collected)
+                                Nothing -> borked
     where   dbErr = return . Left . ER.Err Database $ mempty
             borked = return . Left . ER.Err BorkedData $ mempty 
             getAnswers p pollid =
                 let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
                 in  lrange key 0 (-1)
-            decodeByteList val acc = acc <> map decodeStrict' val
+            decodeByteList val acc = traverse (fmap fst . readInt) val : acc
 
 mockSetStageGetPoll =
     let token = "23232"
