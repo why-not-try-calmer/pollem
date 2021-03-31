@@ -25,7 +25,7 @@ import           Scheduler              (getNow)
 
 --
 data DbReq =
-    SPoll {
+    SCreate {
         create_poll_hash      :: B.ByteString,
         create_poll_token     :: B.ByteString,
         create_poll_id        :: B.ByteString,
@@ -76,6 +76,7 @@ _connDo config = void . connDo config
 dbErr = return . Left . R.Err Database $ mempty
 borked = return . Left . R.Err BorkedData $ mempty
 noUser = return . Left . R.Err UserNotExist $ mempty
+notIn keyvals tested = not $ all (`elem` tested) keyvals
 
 submit :: DbReq -> Redis (Either (Err T.Text) (Ok T.Text))
 submit (SAsk hash token) = -- hash + token generated a first time from the handler
@@ -104,17 +105,36 @@ submit (SConfirm hash fingerprint token) = -- hash generated from the handler, t
                             hmset key [("fingerprint", fingerprint),("verified","true")]
                             return . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
                         else noUser
-submit (SPoll hash token pollid recipe startdate isactive) =
+submit (SCreate hash token pollid recipe created_date isactive) =
     let pollid_txt = decodeUtf8 pollid
+        userKey = "user:" `B.append` hash
     in  exists ("poll:" `B.append` pollid) >>= \case
         Left err -> dbErr
         Right verdict ->
             if verdict then return . Left . R.Err PollExists $ pollid_txt
-            else do
-                hmset ("poll:" `B.append` pollid) [("recipe",recipe),("startDate",startdate),("active",isactive)] -- this structure is not typed! perhaps do it
-                return .  Right . R.Ok $ "Added poll " `T.append` pollid_txt
+            else hgetall userKey >>= \case
+                Left _ -> noUser
+                Right userdata -> 
+                    if notIn [("token",token), ("active", "true")] userdata then return . Left . R.Err UserNotVerified $ mempty
+                    else do
+                        hmset ("poll:" `B.append` pollid) [("author_token", hash),("recipe",recipe),("created_date",created_date),("active",isactive)] -- this structure is not typed! perhaps do it
+                        return .  Right . R.Ok $ "Added poll " `T.append` pollid_txt
 submit (SClose hash token pollid) =
-    return . Right . R.Ok $ "ok"
+    let userKey = "user:" `B.append` hash
+        pollid_txt = decodeUtf8 pollid
+    in  multiExec ( do
+            polldata <- hgetall ("poll:" `B.append` pollid)
+            userdata <- hgetall userKey
+            return $ (,) <$> polldata <*> userdata
+        ) >>= \case
+            TxError _ -> return . Left . R.Err PollNotExist $ pollid_txt
+            TxSuccess (pdata, udata) ->
+                if notIn [("active","true"), ("author_token", token)] pdata then return . Left . R.Err Custom
+                    $ "Either the poll was closed already, or you don't have closing rights." else
+                if notIn [("verified", "true")] udata then return . Left . R.Err UserNotVerified $ decodeUtf8 hash
+                else do
+                hset pollid "active" "false"
+                return . Right . R.Ok $ "ok"
 submit (SAnswer hash token finger pollid answers) =
     let pollid_txt = decodeUtf8 pollid
         userKey = "user:" `B.append` hash
@@ -125,8 +145,8 @@ submit (SAnswer hash token finger pollid answers) =
             ismemberF <- sismember hash ("participants_fingerprints:" `B.append` finger)
             return $ (,,,) <$> polldata <*> userdata <*> ismemberH <*> ismemberF
         ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
-                        if not $ meetConditions pdata [("active","true")] then return . Left . R.Err PollInactive $ pollid_txt else
-                        if not $ meetConditions udata [("verified", "true")] then return . Left . R.Err UserUnverified $ decodeUtf8 hash else
+                        if notIn [("active","true")] pdata  then return . Left . R.Err PollInactive $ pollid_txt else
+                        if notIn [("verified", "true")] udata then return . Left . R.Err UserNotVerified $ decodeUtf8 hash else
                         if isF || isH then return . Left . R.Err PollTakenAlready $ pollid_txt
                         else multiExec ( do
                             sadd ("participants_hashes:" `B.append` pollid) [hash]
@@ -135,7 +155,6 @@ submit (SAnswer hash token finger pollid answers) =
                         ) >>= \case TxSuccess _ -> return . Right . R.Ok $ "Answers submitted successfully!"
                                     _  -> return . Left . R.Err Database $ "Database error"
                     _   -> return . Left . R.Err Database $ "User or poll data missing."
-        where   meetConditions keyvals = all (`elem` keyvals)
 
 getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, [Int]))
 getPoll (SGet pollid) =
@@ -193,7 +212,7 @@ tCreatePoll hash now =
         isactive = "true"
         token = "token1"
         date_now d = encodeStrict . show $ d
-    in  submit $ SPoll hash token pollid recipe now isactive
+    in  submit $ SCreate hash token pollid recipe now isactive
 
 tSubmitAnswers :: Redis (Either (Err T.Text) (Ok T.Text))
 tSubmitAnswers =

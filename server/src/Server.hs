@@ -76,7 +76,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 let pollid = encodeStrict (v+1)
                 now <- getNow
                 res <- connDo (redisconf env) . submit $
-                    SPoll hash token pollid recipe (encodeStrict . show $ now) "true"
+                    SCreate hash token pollid recipe (encodeStrict . show $ now) "true"
                 putMVar (state env) (v+1, g)
                 case res of
                     Left err -> return . RespCreate . ER.renderError $ err
