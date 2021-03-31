@@ -67,8 +67,9 @@ data ReqAskToken = ReqAskToken {
 $(deriveJSON defaultOptions ''ReqAskToken)
 
 data ReqConfirmToken = ReqConfirmToken {
-    user_confirm_token :: T.Text,
-    user_confirm_hash  :: T.Text
+    user_confirm_token       :: T.Text,
+    user_confirm_hash        :: T.Text,
+    user_confirm_fingerprint :: T.Text
 }
 $(deriveJSON defaultOptions ''ReqConfirmToken)
 --

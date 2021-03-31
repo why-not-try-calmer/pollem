@@ -52,7 +52,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
             let mvar = state env
                 hashed = hashEmail (encodeUtf8 email)
                 hashed_b = encodeUtf8 hashed
-                asksubmit token = SAsk hashed_b (encodeUtf8 fingerprint) (encodeUtf8 token)
+                asksubmit token = SAsk hashed_b (encodeUtf8 token)
             res <- liftIO $ do
                 (n, gen) <- takeMVar mvar
                 token <- createToken gen (encodeUtf8 email)
@@ -64,8 +64,8 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 Right msg -> return . RespAskToken . ER.renderOk $ msg
 
         confirm_token :: ReqConfirmToken -> AppM RespConfirmToken
-        confirm_token (ReqConfirmToken token hash) = do
-            let confirmsubmit = SConfirm (encodeUtf8 hash) (encodeUtf8 token)
+        confirm_token (ReqConfirmToken token hash fingerprint ) = do
+            let confirmsubmit = SConfirm (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 fingerprint)
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $ confirmsubmit
             case res of

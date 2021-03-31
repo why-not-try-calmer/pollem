@@ -35,13 +35,13 @@ data DbReq =
         } |
     SClose  { close_poll_id :: B.ByteString } |
     SAsk {
-        ask_has         :: B.ByteString,
-        ask_fingerprint :: B.ByteString,
-        ask_token       :: B.ByteString
+        ask_hash  :: B.ByteString,
+        ask_token :: B.ByteString
     } |
     SConfirm {
-        confirm_hash  :: B.ByteString,
-        confirm_token :: B.ByteString
+        confirm_hash        :: B.ByteString,
+        confirm_fingerprint :: B.ByteString,
+        confirm_token       :: B.ByteString
     } |
     SAnswer {
         answers_hash        :: B.ByteString,
@@ -73,7 +73,7 @@ borked = return . Left . R.Err BorkedData $ mempty
 noUser = return . Left . R.Err UserNotExist $ mempty
 
 submit :: DbReq -> Redis (Either (Err T.Text) (Ok T.Text))
-submit (SAsk hash fingerprint token) =
+submit (SAsk hash token) =
     let key = "user:" `B.append` hash
     in  exists key >>= \case
         Left err -> dbErr
@@ -82,9 +82,9 @@ submit (SAsk hash fingerprint token) =
                 hmset key [("token", token)]
                 return . Right . R.Ok $ "Bear in mind that this email address is registered already. I will send you a verification email nonetheless. You don't need to use it unless you want to re-authenticate your email address."
             else do
-                hmset key [("fingerprint", fingerprint),("token", token),("verified", "false")] -- this structure is not typed! perhaps do it
+                hmset key [("token", token),("verified", "false")] -- this structure is not typed! perhaps do it
                 return . Right . R.Ok $ "Thanks, please check your email"
-submit (SConfirm hash token) =
+submit (SConfirm hash fingerprint token) =
     let key = "user:" `B.append` hash
     in  exists key >>= \case
         Left err -> return . Left . R.Err Database $ T.pack . show $ err
@@ -96,7 +96,7 @@ submit (SConfirm hash token) =
                     Nothing -> noUser
                     Just saved_token ->
                         if token == saved_token then do
-                            hmset key [("verified","true")]
+                            hmset key [("fingerprint", fingerprint),("verified","true")]
                             return . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
                         else noUser
 submit (SPoll pollid recipe startdate isactive) =
