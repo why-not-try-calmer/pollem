@@ -1,11 +1,9 @@
-{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PackageImports    #-}
 {-# LANGUAGE StrictData        #-}
 {-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE TypeOperators     #-}
 
-module AppData where
+module HandlersDataTypes where
 
 import           Control.Concurrent         (MVar)
 import           Control.Concurrent.MVar
@@ -18,7 +16,6 @@ import           Data.Aeson.TH
 import qualified Data.ByteString            as B
 import qualified Data.Map                   as M
 import qualified Data.Text                  as T
-import           Data.Text.Encoding         (encodeUtf8)
 --
 
 {- Requests -}
@@ -48,28 +45,26 @@ data ReqPart = ReqPart {
 $(deriveJSON defaultOptions ''ReqPart)
 
 data ReqCreate = ReqCreate {
-    create_clientId          :: Int,
-    create_clientFingerPrint :: T.Text ,
-    create_recipe            :: T.Text
+    create_hash   :: T.Text,
+    create_recipe :: T.Text
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqCreate)
 
 data ReqClose = ReqClose {
-    close_reason       :: String,
+    close_reason       :: T.Text,
     close_clientPollId :: Int
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqClose)
 
-data ReqAskToken = ReqAskToken {
-    user_fingerprint :: T.Text,
+newtype ReqAskToken = ReqAskToken {
     user_email       :: T.Text
 }
 $(deriveJSON defaultOptions ''ReqAskToken)
 
 data ReqConfirmToken = ReqConfirmToken {
     user_confirm_token       :: T.Text,
-    user_confirm_hash        :: T.Text,
-    user_confirm_fingerprint :: T.Text
+    user_confirm_fingerprint :: T.Text,
+    user_confirm_email       :: T.Text
 }
 $(deriveJSON defaultOptions ''ReqConfirmToken)
 --
@@ -77,21 +72,27 @@ $(deriveJSON defaultOptions ''ReqConfirmToken)
 {- Responses -}
 
 --
-newtype RespPart = RespPart { msg :: T.Text } deriving (Eq, Show)
-$(deriveJSON defaultOptions ''RespPart)
+newtype RespAskToken = RespAskToken { ask_token :: T.Text }
+$(deriveJSON defaultOptions ''RespAskToken)
 
-data GetPollResponse = GetPollResponse {
+newtype RespConfirmToken = RespConfirmToken { confirm_hash :: T.Text }
+$(deriveJSON defaultOptions ''RespConfirmToken)
+
+newtype RespCreate = RespCreate { create_msg :: T.Text}
+$(deriveJSON defaultOptions ''RespCreate)
+
+newtype RespClose = RespClose { close_msg :: T.Text}
+$(deriveJSON defaultOptions ''RespClose)
+
+newtype RespTake = RespTake { take_msg :: T.Text } deriving (Eq, Show)
+$(deriveJSON defaultOptions ''RespTake)
+
+data RespGet = RespGet {
     get_poll_msg :: T.Text ,
     get_poll     :: Maybe Poll,
     get_results  :: Maybe [Int]
 } deriving (Eq, Show)
-$(deriveJSON defaultOptions ''GetPollResponse)
-
-newtype RespAskToken = RespAskToken T.Text
-$(deriveJSON defaultOptions ''RespAskToken)
-
-newtype RespConfirmToken = RespConfirmToken T.Text
-$(deriveJSON defaultOptions ''RespConfirmToken)
+$(deriveJSON defaultOptions ''RespGet)
 --
 
 {- App initialization & types -}
@@ -155,7 +156,7 @@ createToken drg salt = do
     where
         randomBytes = flip randomBytesGenerate
 
-hashEmail email = T.pack . show $ hashWith SHA256 email
+hashEmail email = show $ hashWith SHA256 email
 
 createPollId :: IO Integer
 createPollId = generateBetween 1 100000000

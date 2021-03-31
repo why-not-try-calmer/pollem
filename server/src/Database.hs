@@ -1,12 +1,10 @@
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StrictData        #-}
 
 module Database where
 
-import           AppData
+import           HandlersDataTypes
 import           Compute
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
@@ -28,12 +26,16 @@ import           Scheduler              (getNow)
 --
 data DbReq =
     SPoll {
+        create_poll_hash      :: B.ByteString,
         create_poll_id        :: B.ByteString,
         create_poll_recipe    ::  B.ByteString,
         create_poll_startDate :: B.ByteString,
         create_poll_active    :: B.ByteString
         } |
-    SClose  { close_poll_id :: B.ByteString } |
+    SClose  { 
+        close_hash :: B.ByteString,
+        close_poll_id :: B.ByteString
+    } |
     SAsk {
         ask_hash  :: B.ByteString,
         ask_token :: B.ByteString
@@ -59,7 +61,7 @@ openConnection :: RedisConfig -> ConnectInfo
 openConnection conf = defaultConnectInfo {
     connectHost = host conf,
     connectPort = PortNumber . fromInteger . port $ conf,
-    connectAuth = AppData.auth conf
+    connectAuth = HandlersDataTypes.auth conf
 }
 
 connDo :: RedisConfig -> Redis a -> IO a
@@ -73,7 +75,7 @@ borked = return . Left . R.Err BorkedData $ mempty
 noUser = return . Left . R.Err UserNotExist $ mempty
 
 submit :: DbReq -> Redis (Either (Err T.Text) (Ok T.Text))
-submit (SAsk hash token) =
+submit (SAsk hash token) = -- token generated a first time from the handler
     let key = "user:" `B.append` hash
     in  exists key >>= \case
         Left err -> dbErr
@@ -84,7 +86,7 @@ submit (SAsk hash token) =
             else do
                 hmset key [("token", token),("verified", "false")] -- this structure is not typed! perhaps do it
                 return . Right . R.Ok $ "Thanks, please check your email"
-submit (SConfirm hash fingerprint token) =
+submit (SConfirm hash fingerprint token) = -- token sent by the user, which on match with DB proves that the hash is from a confirmed email address.
     let key = "user:" `B.append` hash
     in  exists key >>= \case
         Left err -> return . Left . R.Err Database $ T.pack . show $ err
@@ -99,7 +101,7 @@ submit (SConfirm hash fingerprint token) =
                             hmset key [("fingerprint", fingerprint),("verified","true")]
                             return . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
                         else noUser
-submit (SPoll pollid recipe startdate isactive) =
+submit (SPoll hash pollid recipe startdate isactive) =
     let pollid_txt = decodeUtf8 pollid
     in  exists ("poll:" `B.append` pollid) >>= \case
         Left err -> dbErr
@@ -108,7 +110,8 @@ submit (SPoll pollid recipe startdate isactive) =
             else do
                 hmset ("poll:" `B.append` pollid) [("recipe",recipe),("startDate",startdate),("active",isactive)] -- this structure is not typed! perhaps do it
                 return .  Right . R.Ok $ "Added poll " `T.append` pollid_txt
-submit (SClose pollid) = return . Right . R.Ok $ "ok"
+submit (SClose hash pollid) = 
+    return . Right . R.Ok $ "ok"
 submit (SAnswer hash finger pollid answers) =
     let pollid_txt = decodeUtf8 pollid
         userKey = "user:" `B.append` hash
@@ -145,22 +148,23 @@ getPoll (SGet pollid) =
                             answers <- collectAnswers
                             poll_meta_data <- hgetall ("poll:" `B.append` pollid)
                             return $ (,) <$> answers <*> poll_meta_data
-                        ) >>= \case
-                        TxError _ -> dbErr
-                        TxSuccess (res, poll_raw) ->
-                            let mb_decoded = sequence $ foldr decodeByteList [] res
-                            in  case mb_decoded of
-                                Just answers ->
-                                    case collect answers of
-                                    Left err -> return . Left $ err
-                                    Right collected ->
-                                        let poll_metadata = M.fromList poll_raw
-                                        in  case M.lookup "recipe" poll_metadata of
+                        )
+                    >>= \case
+                    TxError _ -> dbErr
+                    TxSuccess (res, poll_raw) ->
+                        let mb_decoded = sequence $ foldr decodeByteList [] res
+                        in  case mb_decoded of
+                            Just answers ->
+                                case collect answers of
+                                Left err -> return . Left $ err
+                                Right collected ->
+                                    let poll_metadata = M.fromList poll_raw
+                                    in  case M.lookup "recipe" poll_metadata of
+                                        Nothing -> borked
+                                        Just recipe -> case decodeStrict' recipe :: Maybe Poll of
                                             Nothing -> borked
-                                            Just recipe -> case decodeStrict' recipe :: Maybe Poll of
-                                                Nothing -> borked
-                                                Just poll -> return . Right $ (poll, reverse collected)
-                                Nothing -> borked
+                                            Just poll -> return . Right $ (poll, reverse collected)
+                            Nothing -> borked
     where   decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
             decodeByteList val acc = traverse (fmap fst . readInt) val : acc
             getAnswers p pollid =
@@ -178,14 +182,14 @@ tCreateUser =
         fingerprint = "223322"
     in  hmset ("user:" `B.append` hash) [("fingerprint", fingerprint),("token", token),("verified", "true")]
 
-tCreatePoll :: B.ByteString -> Redis (Either (Err T.Text) (Ok T.Text))
-tCreatePoll now =
+tCreatePoll :: B.ByteString -> B.ByteString -> Redis (Either (Err T.Text) (Ok T.Text))
+tCreatePoll hash now =
     let poll = mockPoll
         pollid = "1"
         recipe = encodeStrict poll
         isactive = "true"
-        date_now d = encodeUtf8 . T.pack . show $ d
-    in  submit $ SPoll pollid recipe now isactive
+        date_now d = encodeStrict . show $ d
+    in  submit $ SPoll hash pollid recipe now isactive
 
 tSubmitAnswers :: Redis (Either (Err T.Text) (Ok T.Text))
 tSubmitAnswers =
@@ -201,11 +205,12 @@ tGetPoll = let pollid = "1" in getPoll . SGet $ pollid
 mockSetStageGetPoll :: IO ()
 mockSetStageGetPoll =
     let pollid = "1"
+        hash = "testUser"
         actions now = do
             tCreateUser
-            tCreatePoll now
+            tCreatePoll hash now
             tSubmitAnswers
             getPoll . SGet $ pollid
-    in  getNow >>= \now -> connDo initRedisConfig $ actions (encodeUtf8 . T.pack . show $ now) >>= \case
+    in  getNow >>= \now -> connDo initRedisConfig $ actions (encodeStrict . show $ now) >>= \case
             Left err  -> liftIO . print . renderError $ err
             Right res -> liftIO . print . show $ res

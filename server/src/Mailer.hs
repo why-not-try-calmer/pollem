@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
@@ -8,7 +7,7 @@
 
 module Mailer where
 
-import           AppData
+import           HandlersDataTypes
 import           Control.Concurrent     (putMVar, takeMVar)
 import           Control.Monad.IO.Class
 import           Data.Aeson

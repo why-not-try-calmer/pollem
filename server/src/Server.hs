@@ -3,12 +3,13 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TypeOperators              #-}
+
 module Server
     ( startApp
     , app
     ) where
 
-import           AppData
+import           HandlersDataTypes
 import           Control.Concurrent          (newEmptyMVar, newMVar, putMVar,
                                               takeMVar)
 import           Control.Concurrent.Async    (async, cancel)
@@ -35,10 +36,10 @@ import           Servant
 type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
     "confirm_token" :> ReqBody '[JSON] ReqConfirmToken :> Post '[JSON] RespConfirmToken :<|>
-    "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespPart :<|>
-    "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespPart :<|>
-    "get" :> QueryParam "id" String :> Get '[JSON] GetPollResponse :<|>
-    "take" :> ReqBody '[JSON] ReqPart :> Post '[JSON] RespPart
+    "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespCreate :<|>
+    "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
+    "get" :> QueryParam "id" String :> Get '[JSON] RespGet :<|>
+    "take" :> ReqBody '[JSON] ReqPart :> Post '[JSON] RespTake
 
 api :: Proxy API
 api = Proxy
@@ -47,11 +48,11 @@ server :: ServerT API AppM
 server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
     where
         ask_token :: ReqAskToken -> AppM RespAskToken
-        ask_token (ReqAskToken fingerprint email) = do
+        ask_token (ReqAskToken email) = do
             env <- ask
             let mvar = state env
                 hashed = hashEmail (encodeUtf8 email)
-                hashed_b = encodeUtf8 hashed
+                hashed_b = encodeStrict hashed
                 asksubmit token = SAsk hashed_b (encodeUtf8 token)
             res <- liftIO $ do
                 (n, gen) <- takeMVar mvar
@@ -64,43 +65,48 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 Right msg -> return . RespAskToken . ER.renderOk $ msg
 
         confirm_token :: ReqConfirmToken -> AppM RespConfirmToken
-        confirm_token (ReqConfirmToken token hash fingerprint ) = do
-            let confirmsubmit = SConfirm (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 fingerprint)
+        confirm_token (ReqConfirmToken token fingerprint email) = do
+            let confirmsubmit = SConfirm (encodeUtf8 token) (encodeUtf8 fingerprint) (encodeStrict . hashEmail . encodeUtf8 $ email)
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $ confirmsubmit
             case res of
                 Left err  -> return . RespConfirmToken . ER.renderError $ err
                 Right msg -> return . RespConfirmToken . ER.renderOk $ msg
 
-        create :: ReqCreate -> AppM RespPart
-        create (ReqCreate hash _ recipe) = do
+        create :: ReqCreate -> AppM RespCreate
+        create (ReqCreate hash recipe) = do
             env <- ask
             liftIO $ do
                 (v, g) <- takeMVar $ state env
                 let pollid = encodeStrict (v+1)
                 now <- getNow
-                res <- connDo (redisconf env) . submit $ SPoll pollid (encodeStrict recipe) (encodeStrict . show $ now) "true"
+                res <- connDo (redisconf env) . submit $ SPoll (encodeUtf8 hash) pollid (encodeUtf8  recipe) (encodeStrict . show $ now) "true"
                 putMVar (state env) (v+1, g)
                 case res of
-                    Left err -> return . RespPart . ER.renderError $ err
-                    Right ok -> return $ RespPart $
+                    Left err -> return . RespCreate . ER.renderError $ err
+                    Right ok -> return $ RespCreate $
                         "Thanks for creating this poll! You can follow the results as they come using this id"
                             `T.append` (T.pack . show $ v+1)
 
-        close :: ReqClose -> AppM RespPart
-        close ReqClose{} = return $ RespPart "Thanks for creating this poll."
+        close :: ReqClose -> AppM RespClose
+        close (ReqClose hash pollid) = do
+            env <- ask
+            res <- liftIO . connDo (redisconf env) . submit $ SClose (encodeUtf8 hash) (encodeStrict pollid)
+            case res of
+                Left err -> return . RespClose . ER.renderError $ err
+                Right ok -> return $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)
 
-        take :: ReqPart -> AppM RespPart
+        take :: ReqPart -> AppM RespTake
         take (ReqPart hash finger pollid answers) = do
             let answers_encoded = B.concat . BL.toChunks . encode $ answers
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $
-                SPoll (encodeUtf8 hash) (encodeUtf8 finger) (encodeUtf8 . T.pack . show $ pollid) answers_encoded
+                SPoll (encodeUtf8 hash) (encodeUtf8 hash) (encodeUtf8 finger) (encodeStrict . show $ pollid) answers_encoded
             case res of
-                Left err  -> return . RespPart . ER.renderError $ err
-                Right msg -> return . RespPart . ER.renderOk $ msg
+                Left err  -> return . RespTake . ER.renderError $ err
+                Right msg -> return . RespTake . ER.renderOk $ msg
 
-        get :: Maybe String -> AppM GetPollResponse
+        get :: Maybe String -> AppM RespGet
         get (Just pollid) =
             let pollid_b = encodeStrict pollid
                 req = SGet pollid_b
@@ -108,9 +114,9 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 env <- ask
                 res <- liftIO . connDo (redisconf env) . getPoll $ SGet pollid_b
                 case res of
-                    Left _ -> return $ GetPollResponse "Unable to find a poll with this id." Nothing Nothing
-                    Right (poll, scores) -> return $ GetPollResponse "Ok" (Just poll) (Just scores)
-        get Nothing = return $ GetPollResponse "Missing poll identifier." Nothing Nothing
+                    Left _ -> return $ RespGet "Unable to find a poll with this id." Nothing Nothing
+                    Right (poll, scores) -> return $ RespGet "Ok" (Just poll) (Just scores)
+        get Nothing = return $ RespGet "Missing poll identifier." Nothing Nothing
 
 
 newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }
