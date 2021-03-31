@@ -157,32 +157,54 @@ getPoll (SGet pollid) =
                                                 Nothing -> borked
                                                 Just poll -> return . Right $ (poll, reverse collected)
                                 Nothing -> borked
-    where   dbErr = return . Left . ER.Err Database $ mempty
+    where   decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
+            decodeByteList val acc = traverse (fmap fst . readInt) val : acc
+            dbErr = return . Left . ER.Err Database $ mempty
             borked = return . Left . ER.Err BorkedData $ mempty
             getAnswers p pollid =
                 let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
                 in  lrange key 0 (-1)
-            decodeByteList val acc = traverse (fmap fst . readInt) val : acc
+--
 
-mockSetStageGetPoll =
+{- Tests -}
+
+--
+tCreateUser :: Redis (Either Reply Status)
+tCreateUser =
     let token = "23232"
-        hash1 = "lklsdklsk"
-        hash2 = "lslsls"
-        fingerprint1 = "223322"
-        fingerprint2 = "11222lkslk"
-        poll = mockPoll
-        answers1 = ["0","1","1","0","0"]
-        answers2 = ["0","0","1","1","1"]
+        hash = "lklsdklsk"
+        fingerprint = "223322"
+    in  hmset ("user:" `B.append` hash) [("fingerprint", fingerprint),("token", token),("verified", "true")]
+
+tCreatePoll :: B.ByteString -> Redis (Either (Err T.Text) (Ok T.Text))
+tCreatePoll now =
+    let poll = mockPoll
         pollid = "1"
         recipe = encodeStrict poll
         isactive = "true"
         date_now d = encodeUtf8 . T.pack . show $ d
+    in  submit $ SPoll pollid recipe now isactive
+
+tSubmitAnswers :: Redis (Either (Err T.Text) (Ok T.Text))
+tSubmitAnswers =
+    let hash = "lklsdklsk"
+        fingerprint = "223322"
+        pollid = "1"
+        answers = ["0","0","1","1","1"]
+    in submit $ SAnswer hash fingerprint pollid answers
+
+tGetPoll :: Redis (Either (Err T.Text) (Poll, [Int]))
+tGetPoll = let pollid = "1" in getPoll . SGet $ pollid
+
+mockSetStageGetPoll :: IO ()
+mockSetStageGetPoll =
+    let pollid = "1"
         actions now = do
-            -- hmset ("user:" `B.append` hash2) [("fingerprint", fingerprint2),("token", token),("verified", "true")]
-            -- submit $ SPoll pollid recipe now isactive
-            -- submit $ SAnswer hash2 fingerprint2 pollid answers2
-            getPoll . SGet $ pollid
-    in  getNow >>= \now -> connDo initRedisConfig $ actions (date_now now) >>= \case
+        tCreateUser
+        tCreatePoll now
+        tSubmitAnswers
+        getPoll . SGet $ pollid
+    in  getNow >>= \now -> connDo initRedisConfig $ actions (encodeUtf8 . T.pack . show $ now) >>= \case
             Left err  -> liftIO . print . renderError $ err
             Right res -> liftIO . print . show $ res
 
