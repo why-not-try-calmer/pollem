@@ -114,7 +114,7 @@ submit (SCreate hash token pollid recipe created_date isactive) =
             if verdict then return . Left . R.Err PollExists $ pollid_txt
             else hgetall userKey >>= \case
                 Left _ -> noUser
-                Right userdata -> 
+                Right userdata ->
                     if notIn [("token",token), ("active", "true")] userdata then return . Left . R.Err UserNotVerified $ mempty
                     else do
                         hmset ("poll:" `B.append` pollid) [("author_token", hash),("recipe",recipe),("created_date",created_date),("active",isactive)] -- this structure is not typed! perhaps do it
@@ -127,14 +127,15 @@ submit (SClose hash token pollid) =
             userdata <- hgetall userKey
             return $ (,) <$> polldata <*> userdata
         ) >>= \case
-            TxError _ -> return . Left . R.Err PollNotExist $ pollid_txt
             TxSuccess (pdata, udata) ->
                 if notIn [("active","true"), ("author_token", token)] pdata then return . Left . R.Err Custom
                     $ "Either the poll was closed already, or you don't have closing rights." else
-                if notIn [("verified", "true")] udata then return . Left . R.Err UserNotVerified $ decodeUtf8 hash
+                if notIn [("verified", "true")] udata then return . Left . R.Err UserNotVerified $ mempty
                 else do
                 hset pollid "active" "false"
-                return . Right . R.Ok $ "ok"
+                return . Right . R.Ok $ "This poll was closed: " `T.append` pollid_txt
+            _ -> return . Left . R.Err PollNotExist $ pollid_txt
+
 submit (SAnswer hash token finger pollid answers) =
     let pollid_txt = decodeUtf8 pollid
         userKey = "user:" `B.append` hash
