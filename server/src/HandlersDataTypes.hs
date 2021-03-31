@@ -36,13 +36,13 @@ data Poll = Poll {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Poll)
 
-data ReqPart = ReqPart {
+data ReqTake = ReqPart {
     part_clientId          :: T.Text,
     part_clientFingerPrint :: T.Text,
     part_clientPollId      :: Int,
     part_answers           :: [Int]
 } deriving (Eq, Show)
-$(deriveJSON defaultOptions ''ReqPart)
+$(deriveJSON defaultOptions ''ReqTake)
 
 data ReqCreate = ReqCreate {
     create_hash   :: T.Text,
@@ -75,7 +75,11 @@ $(deriveJSON defaultOptions ''ReqConfirmToken)
 newtype RespAskToken = RespAskToken { ask_token :: T.Text }
 $(deriveJSON defaultOptions ''RespAskToken)
 
-newtype RespConfirmToken = RespConfirmToken { confirm_hash :: T.Text }
+data RespConfirmToken = RespConfirmToken { 
+    confirm_msg :: T.Text,
+    confirm_hash :: Maybe T.Text,
+    confirm_token :: Maybe T.Text
+}
 $(deriveJSON defaultOptions ''RespConfirmToken)
 
 newtype RespCreate = RespCreate { create_msg :: T.Text}

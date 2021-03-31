@@ -39,7 +39,7 @@ type API =
     "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespCreate :<|>
     "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
     "get" :> QueryParam "id" String :> Get '[JSON] RespGet :<|>
-    "take" :> ReqBody '[JSON] ReqPart :> Post '[JSON] RespTake
+    "take" :> ReqBody '[JSON] ReqTake :> Post '[JSON] RespTake
 
 api :: Proxy API
 api = Proxy
@@ -70,8 +70,8 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $ confirmsubmit
             case res of
-                Left err  -> return . RespConfirmToken . ER.renderError $ err
-                Right msg -> return . RespConfirmToken . ER.renderOk $ msg
+                Left err  -> return $ RespConfirmToken (ER.renderError err) Nothing Nothing
+                Right msg -> return $ RespConfirmToken (ER.renderOk msg) (Just . T.pack . hashEmail . encodeUtf8 $ email) (Just token)
 
         create :: ReqCreate -> AppM RespCreate
         create (ReqCreate hash recipe) = do
@@ -96,7 +96,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 Left err -> return . RespClose . ER.renderError $ err
                 Right ok -> return $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)
 
-        take :: ReqPart -> AppM RespTake
+        take :: ReqTake -> AppM RespTake
         take (ReqPart hash finger pollid answers) = do
             let answers_encoded = B.concat . BL.toChunks . encode $ answers
             env <- ask
