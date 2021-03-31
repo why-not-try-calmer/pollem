@@ -51,27 +51,26 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
         ask_token (ReqAskToken email) = do
             env <- ask
             let mvar = state env
-                hashed = hashEmail (encodeUtf8 email)
-                hashed_b = encodeStrict hashed
-                asksubmit token = SAsk hashed_b (encodeUtf8 token)
+                hashed = hashEmail email
+                asksubmit token = SAsk (encodeStrict hashed) token
             res <- liftIO $ do
                 (n, gen) <- takeMVar mvar
-                token <- createToken gen (encodeUtf8 email)
+                token <- createToken gen email
                 putMVar mvar (n, gen)
-                sendEmail $ makeSendGridEmail (sendgridconf env) token email
-                connDo (redisconf env) . submit $ asksubmit token
+                sendEmail $ makeSendGridEmail (sendgridconf env) (encodeStrict token) email
+                connDo (redisconf env) . submit $ asksubmit (encodeStrict token)
             case res of
                 Left err  -> return . RespAskToken . ER.renderError $ err
                 Right msg -> return . RespAskToken . ER.renderOk $ msg
 
         confirm_token :: ReqConfirmToken -> AppM RespConfirmToken
         confirm_token (ReqConfirmToken token fingerprint email) = do
-            let confirmsubmit = SConfirm (encodeUtf8 token) (encodeUtf8 fingerprint) (encodeStrict . hashEmail . encodeUtf8 $ email)
+            let confirmsubmit = SConfirm token fingerprint email
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $ confirmsubmit
             case res of
                 Left err  -> return $ RespConfirmToken (ER.renderError err) Nothing Nothing
-                Right msg -> return $ RespConfirmToken (ER.renderOk msg) (Just . T.pack . hashEmail . encodeUtf8 $ email) (Just token)
+                Right msg -> return $ RespConfirmToken (ER.renderOk msg) (Just $ decodeUtf8 email) (Just $ decodeUtf8 token)
 
         create :: ReqCreate -> AppM RespCreate
         create (ReqCreate hash token recipe) = do
@@ -81,7 +80,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 let pollid = encodeStrict (v+1)
                 now <- getNow
                 res <- connDo (redisconf env) . submit $ 
-                    SPoll (encodeUtf8 hash) (encodeUtf8 token) pollid (encodeUtf8  recipe) (encodeStrict . show $ now) "true"
+                    SPoll hash token pollid recipe (encodeStrict . show $ now) "true"
                 putMVar (state env) (v+1, g)
                 case res of
                     Left err -> return . RespCreate . ER.renderError $ err
@@ -93,17 +92,16 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
         close (ReqClose hash token pollid) = do
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $
-                SClose (encodeUtf8 hash) (encodeUtf8 token) (encodeStrict pollid)
+                SClose hash token pollid
             case res of
                 Left err -> return . RespClose . ER.renderError $ err
                 Right ok -> return $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)
 
         take :: ReqTake -> AppM RespTake
-        take (ReqPart hash token finger pollid answers) = do
-            let answers_encoded = map (B.concat . BL.toChunks . encode) answers
+        take (ReqTake hash token finger pollid answers) = do
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $
-                SAnswer (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeStrict . show $ pollid) answers_encoded
+                SAnswer hash token finger (encodeStrict . show $ pollid) answers
             case res of
                 Left err  -> return . RespTake . ER.renderError $ err
                 Right msg -> return . RespTake . ER.renderOk $ msg

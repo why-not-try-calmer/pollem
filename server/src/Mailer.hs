@@ -15,6 +15,7 @@ import           Data.Aeson.TH
 import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8)
 import           Network.HTTP.Req
+import qualified Data.ByteString as B
 --
 
 {-- Mailer types  --}
@@ -24,7 +25,6 @@ data Content = Content {
    _type  :: T.Text ,
    _value :: T.Text
 }
--- $(deriveJSON defaultOptions ''Content)1
 
 instance ToJSON Content where
    toJSON Content{..} =
@@ -60,7 +60,6 @@ data Email = Email {
    personalizations :: [PersoObject],
    content          :: [Content]
 }
--- $(deriveJSON defaultOptions ''Email)
 
 instance ToJSON Email where
    toJSON Email{..} = object [
@@ -81,12 +80,12 @@ data SendGridEmail = SendGridEmail {
 {-- Mailer functions  --}
 
 --
-makeSendGridEmail :: SendGridConfig -> T.Text -> T.Text  -> SendGridEmail
+makeSendGridEmail :: SendGridConfig -> B.ByteString -> B.ByteString  -> SendGridEmail
 makeSendGridEmail (SendGridBearer bearer) token email =
    let   email_header = oAuth2Bearer bearer
-         content = Content "text/plain" $ "Please copy-paste this token to the 'token' field in the application: " `T.append` token
+         content = Content "text/plain" $ "Please copy-paste this token to the 'token' field in the application: " `T.append` decodeUtf8 token
          sender = Addressee "mrnycticorax@gmail.com" "MrNycticorax"
-         addressee = Addressee email "Undisclosed Recipient"
+         addressee = Addressee (decodeUtf8 email) "Undisclosed Recipient"
          personalization = PersoObject [addressee] "Mille sabords!"
    in    SendGridEmail email_header $ Email sender addressee [personalization] [content]
 
