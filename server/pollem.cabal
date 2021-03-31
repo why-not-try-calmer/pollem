@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2979371c40f3b90bc7a11feeb4d0a7977e564cf056427ea083128d834e3d10c5
+-- hash: 964b8e23fb020576ac8e4c9eeca4eb45f0b8302791c19058879dff50befe0ccf
 
 name:           pollem
 version:        0.1.0.0
@@ -62,7 +62,7 @@ executable server-exe
       Paths_pollem
   hs-source-dirs:
       app
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N -O2
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
     , aeson-extra

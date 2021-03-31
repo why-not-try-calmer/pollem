@@ -116,7 +116,6 @@ instance FromJSON ReqTake where
         take_pollid <- obj .: "take_pollid"
         take_answers <- obj .: "take_answers"
         return (ReqTake { take_hash = take_hash, take_token = take_token, take_fingerprint = take_fingerprint, take_pollid = take_pollid, take_answers = take_answers })
-
 --
 
 {- Responses -}
