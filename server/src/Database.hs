@@ -4,7 +4,6 @@
 
 module Database where
 
-import           HandlersDataTypes
 import           Compute
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
@@ -18,6 +17,7 @@ import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
 import           Database.Redis
 import           ErrorsReplies
 import qualified ErrorsReplies          as R
+import           HandlersDataTypes
 import           Scheduler              (getNow)
 --
 
@@ -27,13 +27,15 @@ import           Scheduler              (getNow)
 data DbReq =
     SPoll {
         create_poll_hash      :: B.ByteString,
+        create_poll_token     :: B.ByteString,
         create_poll_id        :: B.ByteString,
         create_poll_recipe    ::  B.ByteString,
         create_poll_startDate :: B.ByteString,
         create_poll_active    :: B.ByteString
         } |
-    SClose  { 
-        close_hash :: B.ByteString,
+    SClose  {
+        close_hash    :: B.ByteString,
+        close_token   :: B.ByteString,
         close_poll_id :: B.ByteString
     } |
     SAsk {
@@ -47,6 +49,7 @@ data DbReq =
     } |
     SAnswer {
         answers_hash        :: B.ByteString,
+        answers_token       :: B.ByteString,
         answers_fingerprint :: B.ByteString,
         answers_poll_id     :: B.ByteString,
         answers_answers     :: [B.ByteString]
@@ -75,7 +78,7 @@ borked = return . Left . R.Err BorkedData $ mempty
 noUser = return . Left . R.Err UserNotExist $ mempty
 
 submit :: DbReq -> Redis (Either (Err T.Text) (Ok T.Text))
-submit (SAsk hash token) = -- token generated a first time from the handler
+submit (SAsk hash token) = -- hash + token generated a first time from the handler
     let key = "user:" `B.append` hash
     in  exists key >>= \case
         Left err -> dbErr
@@ -86,7 +89,7 @@ submit (SAsk hash token) = -- token generated a first time from the handler
             else do
                 hmset key [("token", token),("verified", "false")] -- this structure is not typed! perhaps do it
                 return . Right . R.Ok $ "Thanks, please check your email"
-submit (SConfirm hash fingerprint token) = -- token sent by the user, which on match with DB proves that the hash is from a confirmed email address.
+submit (SConfirm hash fingerprint token) = -- hash generated from the handler, token sent by the user, which on match with DB proves that the hash is from a confirmed email address.
     let key = "user:" `B.append` hash
     in  exists key >>= \case
         Left err -> return . Left . R.Err Database $ T.pack . show $ err
@@ -101,7 +104,7 @@ submit (SConfirm hash fingerprint token) = -- token sent by the user, which on m
                             hmset key [("fingerprint", fingerprint),("verified","true")]
                             return . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
                         else noUser
-submit (SPoll hash pollid recipe startdate isactive) =
+submit (SPoll hash token pollid recipe startdate isactive) =
     let pollid_txt = decodeUtf8 pollid
     in  exists ("poll:" `B.append` pollid) >>= \case
         Left err -> dbErr
@@ -110,9 +113,9 @@ submit (SPoll hash pollid recipe startdate isactive) =
             else do
                 hmset ("poll:" `B.append` pollid) [("recipe",recipe),("startDate",startdate),("active",isactive)] -- this structure is not typed! perhaps do it
                 return .  Right . R.Ok $ "Added poll " `T.append` pollid_txt
-submit (SClose hash pollid) = 
+submit (SClose hash token pollid) =
     return . Right . R.Ok $ "ok"
-submit (SAnswer hash finger pollid answers) =
+submit (SAnswer hash token finger pollid answers) =
     let pollid_txt = decodeUtf8 pollid
         userKey = "user:" `B.append` hash
     in  multiExec ( do
@@ -188,16 +191,18 @@ tCreatePoll hash now =
         pollid = "1"
         recipe = encodeStrict poll
         isactive = "true"
+        token = "token1"
         date_now d = encodeStrict . show $ d
-    in  submit $ SPoll hash pollid recipe now isactive
+    in  submit $ SPoll hash token pollid recipe now isactive
 
 tSubmitAnswers :: Redis (Either (Err T.Text) (Ok T.Text))
 tSubmitAnswers =
     let hash = "lklsdklsk"
         fingerprint = "223322"
         pollid = "1"
+        token= "token1"
         answers = ["0","0","1","1","1"]
-    in submit $ SAnswer hash fingerprint pollid answers
+    in submit $ SAnswer hash token fingerprint pollid answers
 
 tGetPoll :: Redis (Either (Err T.Text) (Poll, [Int]))
 tGetPoll = let pollid = "1" in getPoll . SGet $ pollid

@@ -74,13 +74,14 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 Right msg -> return $ RespConfirmToken (ER.renderOk msg) (Just . T.pack . hashEmail . encodeUtf8 $ email) (Just token)
 
         create :: ReqCreate -> AppM RespCreate
-        create (ReqCreate hash recipe) = do
+        create (ReqCreate hash token recipe) = do
             env <- ask
             liftIO $ do
                 (v, g) <- takeMVar $ state env
                 let pollid = encodeStrict (v+1)
                 now <- getNow
-                res <- connDo (redisconf env) . submit $ SPoll (encodeUtf8 hash) pollid (encodeUtf8  recipe) (encodeStrict . show $ now) "true"
+                res <- connDo (redisconf env) . submit $ 
+                    SPoll (encodeUtf8 hash) (encodeUtf8 token) pollid (encodeUtf8  recipe) (encodeStrict . show $ now) "true"
                 putMVar (state env) (v+1, g)
                 case res of
                     Left err -> return . RespCreate . ER.renderError $ err
@@ -89,19 +90,20 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                             `T.append` (T.pack . show $ v+1)
 
         close :: ReqClose -> AppM RespClose
-        close (ReqClose hash pollid) = do
+        close (ReqClose hash token pollid) = do
             env <- ask
-            res <- liftIO . connDo (redisconf env) . submit $ SClose (encodeUtf8 hash) (encodeStrict pollid)
+            res <- liftIO . connDo (redisconf env) . submit $
+                SClose (encodeUtf8 hash) (encodeUtf8 token) (encodeStrict pollid)
             case res of
                 Left err -> return . RespClose . ER.renderError $ err
                 Right ok -> return $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)
 
         take :: ReqTake -> AppM RespTake
-        take (ReqPart hash finger pollid answers) = do
-            let answers_encoded = B.concat . BL.toChunks . encode $ answers
+        take (ReqPart hash token finger pollid answers) = do
+            let answers_encoded = map (B.concat . BL.toChunks . encode) answers
             env <- ask
             res <- liftIO . connDo (redisconf env) . submit $
-                SPoll (encodeUtf8 hash) (encodeUtf8 hash) (encodeUtf8 finger) (encodeStrict . show $ pollid) answers_encoded
+                SAnswer (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeStrict . show $ pollid) answers_encoded
             case res of
                 Left err  -> return . RespTake . ER.renderError $ err
                 Right msg -> return . RespTake . ER.renderOk $ msg

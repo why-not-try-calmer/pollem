@@ -37,22 +37,25 @@ data Poll = Poll {
 $(deriveJSON defaultOptions ''Poll)
 
 data ReqTake = ReqPart {
-    part_clientId          :: T.Text,
-    part_clientFingerPrint :: T.Text,
-    part_clientPollId      :: Int,
+    part_hash          :: T.Text,
+    part_token          :: T.Text,
+    part_fingerprint :: T.Text,
+    part_pollid      :: Int,
     part_answers           :: [Int]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqTake)
 
 data ReqCreate = ReqCreate {
     create_hash   :: T.Text,
+    create_token   :: T.Text,
     create_recipe :: T.Text
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqCreate)
 
 data ReqClose = ReqClose {
-    close_reason       :: T.Text,
-    close_clientPollId :: Int
+    close_hash       :: T.Text,
+    close_token :: T.Text,
+    close_pollid :: Int
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqClose)
 
