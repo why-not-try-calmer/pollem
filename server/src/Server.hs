@@ -9,23 +9,19 @@ module Server
     , app
     ) where
 
-import           HandlersDataTypes
 import           Control.Concurrent          (newEmptyMVar, newMVar, putMVar,
                                               takeMVar)
-import           Control.Concurrent.Async    (async, cancel)
-import           Control.Exception           (try)
 import           Control.Monad.Except        (ExceptT, runExceptT)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Reader
 import           Data.Aeson                  (ToJSON (toEncoding), encode,
                                               fromEncoding, fromJSON, toJSON)
 import           Data.Aeson.Extra            (encodeStrict)
-import qualified Data.ByteString             as B
-import qualified Data.ByteString.Lazy        as BL
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
 import           Database
 import qualified ErrorsReplies               as ER
+import           HandlersDataTypes
 import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
@@ -79,7 +75,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 (v, g) <- takeMVar $ state env
                 let pollid = encodeStrict (v+1)
                 now <- getNow
-                res <- connDo (redisconf env) . submit $ 
+                res <- connDo (redisconf env) . submit $
                     SPoll hash token pollid recipe (encodeStrict . show $ now) "true"
                 putMVar (state env) (v+1, g)
                 case res of
