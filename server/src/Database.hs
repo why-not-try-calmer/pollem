@@ -29,7 +29,7 @@ data DbReq =
         create_poll_hash      :: B.ByteString,
         create_poll_token     :: B.ByteString,
         create_poll_id        :: B.ByteString,
-        create_poll_recipe    ::  B.ByteString,
+        create_poll_recipe    :: B.ByteString,
         create_poll_startDate :: B.ByteString,
         create_poll_active    :: B.ByteString
         } |
