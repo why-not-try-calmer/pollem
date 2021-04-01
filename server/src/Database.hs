@@ -10,7 +10,6 @@ import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson.Extra       (decodeStrict', encodeStrict)
 import qualified Data.ByteString        as B
 import           Data.ByteString.Char8  (readInt)
-import           Data.Foldable          (foldl', traverse_)
 import qualified Data.Map               as M
 import           Data.Maybe
 import qualified Data.Text              as T

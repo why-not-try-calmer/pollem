@@ -20,6 +20,7 @@ import           Data.Aeson.Extra            (encodeStrict)
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
 import           Database
+import           Database.Redis              (Connection)
 import qualified ErrorsReplies               as ER
 import           HandlersDataTypes
 import           Mailer
@@ -28,7 +29,6 @@ import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (getNow, schedule)
 import           Servant
-import Database.Redis (Connection)
 
 type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
