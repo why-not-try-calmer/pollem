@@ -33,6 +33,4 @@ runSweeper conn =
     in  startWorker `catch` \e -> let e' = e :: SomeException in startWorker
 
 main :: IO ()
-main = do
-    connector <- initRedisConnection
-    runSweeper connector
+main = initRedisConnection >>= runSweeper
