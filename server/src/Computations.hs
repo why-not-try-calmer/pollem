@@ -1,11 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Compute where
+module Computations where
 import           Data.List     (transpose)
 import qualified Data.Text     as T
 import           ErrorsReplies
 import qualified ErrorsReplies as ER
-
 
 collect :: (Num a, Eq a) => [[a]] -> Either (ER.Err T.Text ) [a]
 collect [] = Left . ER.Err BorkedData $ mempty

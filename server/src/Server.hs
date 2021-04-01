@@ -21,7 +21,7 @@ import qualified Data.Text                   as T
 import           Data.Text.Encoding
 import           Database
 import           Database.Redis              (Connection)
-import qualified ErrorsReplies               as ER
+import qualified ErrorsReplies               as R
 import           HandlersDataTypes
 import           Mailer
 import           Network.Wai
@@ -29,9 +29,6 @@ import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (getNow, schedule)
 import           Servant
-import Control.Concurrent.Async
-import Control.Exception
-import Data.IORef
 
 
 type API =
@@ -61,8 +58,8 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 sendEmail $ makeSendGridEmail (sendgridconf env) (encodeStrict token) email
                 connDo (redisconn env) . submit $ asksubmit (encodeStrict token)
             case res of
-                Left err  -> return . RespAskToken . ER.renderError $ err
-                Right msg -> return . RespAskToken . ER.renderOk $ msg
+                Left err  -> return . RespAskToken . R.renderError $ err
+                Right msg -> return . RespAskToken . R.renderOk $ msg
 
         confirm_token :: ReqConfirmToken -> AppM RespConfirmToken
         confirm_token (ReqConfirmToken token fingerprint email) = do
@@ -70,8 +67,8 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
             env <- ask
             res <- liftIO . connDo (redisconn env) . submit $ confirmsubmit
             case res of
-                Left err  -> return $ RespConfirmToken (ER.renderError err) Nothing Nothing
-                Right msg -> return $ RespConfirmToken (ER.renderOk msg) (Just $ decodeUtf8 email) (Just $ decodeUtf8 token)
+                Left err  -> return $ RespConfirmToken (R.renderError err) Nothing Nothing
+                Right msg -> return $ RespConfirmToken (R.renderOk msg) (Just $ decodeUtf8 email) (Just $ decodeUtf8 token)
 
         create :: ReqCreate -> AppM RespCreate
         create (ReqCreate hash token recipe startDate endDate) = do
@@ -84,7 +81,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                     SCreate hash token pollid recipe startDate endDate
                 putMVar (state env) (v+1, g)
                 case res of
-                    Left err -> return . RespCreate . ER.renderError $ err
+                    Left err -> return . RespCreate . R.renderError $ err
                     Right ok -> return $ RespCreate $
                         "Thanks for creating this poll! You can follow the results as they come using this id"
                             `T.append` (T.pack . show $ v+1)
@@ -95,7 +92,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
             res <- liftIO . connDo (redisconn env) . submit $
                 SClose hash token pollid
             case res of
-                Left err -> return . RespClose . ER.renderError $ err
+                Left err -> return . RespClose . R.renderError $ err
                 Right ok -> return $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)
 
         take :: ReqTake -> AppM RespTake
@@ -104,8 +101,8 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
             res <- liftIO . connDo (redisconn env) . submit $
                 SAnswer hash token finger (encodeStrict . show $ pollid) answers
             case res of
-                Left err  -> return . RespTake . ER.renderError $ err
-                Right msg -> return . RespTake . ER.renderOk $ msg
+                Left err  -> return . RespTake . R.renderError $ err
+                Right msg -> return . RespTake . R.renderOk $ msg
 
         get :: Maybe String -> AppM RespGet
         get (Just pollid) =
@@ -146,29 +143,3 @@ startApp = do
     connector <- initRedisConnection
     let env = Config initSendgridConfig connector state
     run 8080 (app env)
-
-main = 
-    let startWorker ref = 
-            withAsync (forever $ do
-            print "Let's start"
-            threadDelay 3000000
-            print "... working ..."
-            threadDelay 3000000
-            print "Let's finish"
-            )(\th -> do
-            writeIORef ref (Just th)
-            wait th
-            )
-        startMaster ref = async $ do
-            threadDelay 4000000
-            print "Interrupting"
-            readIORef ref >>= \case
-                Just th -> cancel th
-                Nothing -> return ()
-            print "Master finished."
-    in  do
-        ref <- newIORef Nothing
-        startMaster ref
-        startWorker ref `catch` \e -> let e' = e :: SomeException in startWorker ref    
-        print "ok"
-    

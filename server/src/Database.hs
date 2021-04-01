@@ -4,7 +4,7 @@
 
 module Database where
 
-import           Compute
+import           Computations
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson.Extra       (decodeStrict', encodeStrict)
@@ -215,6 +215,13 @@ sweeper = smembers "polls" >>= \case
                 Right maybeEnd -> case maybeEnd of
                     Nothing -> return Nothing
                     Just e  -> return . Just $ (pollid, e)
+
+disablePolls :: [B.ByteString] -> Redis (Either (Err T.Text) (Ok T.Text))
+disablePolls ls = multiExec (sequence_ <$> traverse disablePoll ls) >>= \case
+    TxError _ -> dbErr
+    TxSuccess _ -> return . Right . R.Ok $ "Disabled these outdated polls: " `T.append` (T.concat . map decodeUtf8 $ ls)
+    where
+        disablePoll l = hset ("poll:" `B.append` l) "active" "false"
 --
 
 {- Tests -}
