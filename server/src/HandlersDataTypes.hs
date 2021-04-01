@@ -75,11 +75,11 @@ instance FromJSON ReqConfirmToken where
         return (ReqConfirmToken { req_confirm_token = req_confirm_token, req_confirm_fingerprint = req_confirm_fingerprint, req_confirm_email = req_confirm_email})
 
 data ReqCreate = ReqCreate {
-    req_create_hash   :: B.ByteString,
-    req_create_token  :: B.ByteString,
-    req_create_recipe :: B.ByteString,
+    req_create_hash      :: B.ByteString,
+    req_create_token     :: B.ByteString,
+    req_create_recipe    :: B.ByteString,
     req_create_startDate :: B.ByteString,
-    req_create_endDate :: Maybe B.ByteString
+    req_create_endDate   :: Maybe B.ByteString
 } deriving (Eq, Show)
 
 instance FromJSON ReqCreate where
@@ -90,7 +90,7 @@ instance FromJSON ReqCreate where
         req_create_startDate <- obj .: "req_create_startDate"
         req_create_endDate <- obj .: "req_create_endDate"
 
-        return (ReqCreate { 
+        return (ReqCreate {
             req_create_hash = req_create_hash, req_create_token = req_create_token, req_create_recipe = req_create_recipe,
             req_create_startDate = req_create_startDate, req_create_endDate = req_create_endDate
         })
@@ -156,33 +156,9 @@ data RespGet = RespGet {
 $(deriveJSON defaultOptions ''RespGet)
 --
 
-{- App initialization & types -}
+{- Stateful types -}
 
 --
-newtype SendGridConfig = SendGridBearer { bearer :: B.ByteString }
-
-initSendgridConfig :: SendGridConfig
-initSendgridConfig = SendGridBearer "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"
-
-data RedisConfig = RedisConfig {
-    auth :: Maybe B.ByteString,
-    port :: Integer,
-    host :: String
-}
-
-initRedisConfig :: RedisConfig
-initRedisConfig = RedisConfig {
-    host ="ec2-108-128-25-66.eu-west-1.compute.amazonaws.com",
-    port = 14459,
-    auth = Just "p17df6aa47fbc3f8dfcbcbfba00334ecece8b39a921ed91d97f6a9eeefd8d1793"
-}
-
-data Config = Config {
-    sendgridconf :: SendGridConfig,
-    redisconf    :: RedisConfig,
-    state        :: State
-}
-
 mockPoll :: Poll
 mockPoll = Poll {
         poll_question = "A question",

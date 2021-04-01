@@ -16,6 +16,16 @@ import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8)
 import           Network.HTTP.Req
 import qualified Data.ByteString as B
+
+--
+
+{-- App types  --}
+
+--
+newtype SendGridConfig = SendGridBearer { bearer :: B.ByteString }
+
+initSendgridConfig :: SendGridConfig
+initSendgridConfig = SendGridBearer "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"
 --
 
 {-- Mailer types  --}

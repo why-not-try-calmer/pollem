@@ -12,6 +12,7 @@ import qualified Data.ByteString        as B
 import           Data.ByteString.Char8  (readInt)
 import           Data.Foldable          (foldl', traverse_)
 import qualified Data.Map               as M
+import           Data.Maybe
 import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
 import           Database.Redis
@@ -19,7 +20,6 @@ import           ErrorsReplies
 import qualified ErrorsReplies          as R
 import           HandlersDataTypes
 import           Scheduler              (getNow)
-import Data.Maybe
 --
 
 {-- Requests to db: types --}
@@ -61,18 +61,18 @@ data DbReq =
 {-- Requests to db: functions --}
 
 --
-openConnection :: RedisConfig -> ConnectInfo
-openConnection conf = defaultConnectInfo {
-    connectHost = host conf,
-    connectPort = PortNumber . fromInteger . port $ conf,
-    connectAuth = HandlersDataTypes.auth conf
+initRedisConnection :: IO Connection
+initRedisConnection = connect $ defaultConnectInfo {
+    connectHost ="ec2-108-128-25-66.eu-west-1.compute.amazonaws.com",
+    connectPort = PortNumber 14459,
+    connectAuth = Just "p17df6aa47fbc3f8dfcbcbfba00334ecece8b39a921ed91d97f6a9eeefd8d1793"
 }
 
-connDo :: RedisConfig -> Redis a -> IO a
-connDo config action = withConnect (openConnection config) (`runRedis` action)
+connDo :: Connection -> Redis a -> IO a
+connDo = runRedis
 
-_connDo :: RedisConfig  -> Redis a -> IO ()
-_connDo config = void . connDo config
+_connDo :: Connection  -> Redis a -> IO ()
+_connDo conn = void . connDo conn
 
 dbErr = return . Left . R.Err Database $ mempty
 borked = return . Left . R.Err BorkedData $ mempty
@@ -215,22 +215,12 @@ sweeper = smembers "polls" >>= \case
                 Left err -> return Nothing
                 Right maybeEnd -> case maybeEnd of
                     Nothing -> return Nothing
-                    Just e -> return . Just $ (pollid, e)
-    --
+                    Just e  -> return . Just $ (pollid, e)
+--
 
 {- Tests -}
 
 --
-main = do
-    response <- connDo initRedisConfig $ sweeper >>= \case
-        Left err -> return . show $ renderError  err
-        Right res -> return . show $ res
-    print response
-
-main' = connDo initRedisConfig $ smembers "polls" >>= \case
-    Left err -> liftIO . print $ err
-    Right ids -> liftIO . print $ ids
-
 tCreateUser :: Redis (Either Reply Status)
 tCreateUser =
     let token = "23232"
@@ -259,8 +249,8 @@ tSubmitAnswers =
 tGetPoll :: Redis (Either (Err T.Text) (Poll, [Int]))
 tGetPoll = let pollid = "1" in getPoll . SGet $ pollid
 
-mockSetStageGetPoll :: IO ()
-mockSetStageGetPoll =
+mockSetStageGetPoll :: Connection -> IO ()
+mockSetStageGetPoll conn =
     let pollid = "1"
         hash = "testUser"
         actions now = do
@@ -268,6 +258,6 @@ mockSetStageGetPoll =
             tCreatePoll hash now
             tSubmitAnswers
             getPoll . SGet $ pollid
-    in  getNow >>= \now -> connDo initRedisConfig $ actions (encodeStrict . show $ now) >>= \case
+    in  getNow >>= \now -> connDo conn $ actions (encodeStrict . show $ now) >>= \case
             Left err  -> liftIO . print . renderError $ err
             Right res -> liftIO . print . show $ res

@@ -28,6 +28,7 @@ import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (getNow, schedule)
 import           Servant
+import Database.Redis (Connection)
 
 type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
@@ -54,7 +55,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 token <- createToken gen email
                 putMVar mvar (n, gen)
                 sendEmail $ makeSendGridEmail (sendgridconf env) (encodeStrict token) email
-                connDo (redisconf env) . submit $ asksubmit (encodeStrict token)
+                connDo (redisconn env) . submit $ asksubmit (encodeStrict token)
             case res of
                 Left err  -> return . RespAskToken . ER.renderError $ err
                 Right msg -> return . RespAskToken . ER.renderOk $ msg
@@ -63,7 +64,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
         confirm_token (ReqConfirmToken token fingerprint email) = do
             let confirmsubmit = SConfirm token fingerprint email
             env <- ask
-            res <- liftIO . connDo (redisconf env) . submit $ confirmsubmit
+            res <- liftIO . connDo (redisconn env) . submit $ confirmsubmit
             case res of
                 Left err  -> return $ RespConfirmToken (ER.renderError err) Nothing Nothing
                 Right msg -> return $ RespConfirmToken (ER.renderOk msg) (Just $ decodeUtf8 email) (Just $ decodeUtf8 token)
@@ -75,7 +76,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 (v, g) <- takeMVar $ state env
                 let pollid = encodeStrict (v+1)
                 now <- getNow
-                res <- connDo (redisconf env) . submit $
+                res <- connDo (redisconn env) . submit $
                     SCreate hash token pollid recipe startDate endDate
                 putMVar (state env) (v+1, g)
                 case res of
@@ -87,7 +88,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
         close :: ReqClose -> AppM RespClose
         close (ReqClose hash token pollid) = do
             env <- ask
-            res <- liftIO . connDo (redisconf env) . submit $
+            res <- liftIO . connDo (redisconn env) . submit $
                 SClose hash token pollid
             case res of
                 Left err -> return . RespClose . ER.renderError $ err
@@ -96,7 +97,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
         take :: ReqTake -> AppM RespTake
         take (ReqTake hash token finger pollid answers) = do
             env <- ask
-            res <- liftIO . connDo (redisconf env) . submit $
+            res <- liftIO . connDo (redisconn env) . submit $
                 SAnswer hash token finger (encodeStrict . show $ pollid) answers
             case res of
                 Left err  -> return . RespTake . ER.renderError $ err
@@ -108,7 +109,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 req = SGet pollid_b
             in  do
                 env <- ask
-                res <- liftIO . connDo (redisconf env) . getPoll $ SGet pollid_b
+                res <- liftIO . connDo (redisconn env) . getPoll $ SGet pollid_b
                 case res of
                     Left _ -> return $ RespGet "Unable to find a poll with this id." Nothing Nothing
                     Right (poll, scores) -> return $ RespGet "Ok" (Just poll) (Just scores)
@@ -117,6 +118,12 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
 
 newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader Config)
+
+data Config = Config {
+    sendgridconf :: SendGridConfig,
+    redisconn    :: Connection,
+    state        :: State
+}
 
 runAppM :: AppM a -> Config -> IO (Either ServerError a)
 runAppM app = runExceptT . runReaderT (unAppM app)
@@ -132,5 +139,6 @@ app env = simpleCors $ serve api $ hoistServer api (injectEnv env) server
 startApp :: IO ()
 startApp = do
     state <- initState
-    let env = Config initSendgridConfig initRedisConfig state
+    connector <- initRedisConnection
+    let env = Config initSendgridConfig connector state
     run 8080 (app env)
