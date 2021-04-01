@@ -7,15 +7,15 @@
 
 module Mailer where
 
-import           HandlersDataTypes
 import           Control.Concurrent     (putMVar, takeMVar)
 import           Control.Monad.IO.Class
 import           Data.Aeson
 import           Data.Aeson.TH
+import qualified Data.ByteString        as B
 import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8)
+import           HandlersDataTypes
 import           Network.HTTP.Req
-import qualified Data.ByteString as B
 
 --
 
