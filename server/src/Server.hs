@@ -10,7 +10,7 @@ module Server
     ) where
 
 import           Control.Concurrent          (newEmptyMVar, newMVar, putMVar,
-                                              takeMVar)
+                                              takeMVar, threadDelay)
 import           Control.Monad.Except        (ExceptT, runExceptT)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Reader
@@ -29,6 +29,10 @@ import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (getNow, schedule)
 import           Servant
+import Control.Concurrent.Async
+import Control.Exception
+import Data.IORef
+
 
 type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
@@ -128,7 +132,7 @@ data Config = Config {
 runAppM :: AppM a -> Config -> IO (Either ServerError a)
 runAppM app = runExceptT . runReaderT (unAppM app)
 
-injectEnv :: Config -> AppM a -> Handler a
+injectEnv :: Config -> AppM a -> Servant.Handler a
 injectEnv config app = liftIO (runAppM app config) >>= \case
     Left err -> throwError err
     Right v  -> return v
@@ -142,3 +146,29 @@ startApp = do
     connector <- initRedisConnection
     let env = Config initSendgridConfig connector state
     run 8080 (app env)
+
+main = 
+    let startWorker ref = 
+            withAsync (forever $ do
+            print "Let's start"
+            threadDelay 3000000
+            print "... working ..."
+            threadDelay 3000000
+            print "Let's finish"
+            )(\th -> do
+            writeIORef ref (Just th)
+            wait th
+            )
+        startMaster ref = async $ do
+            threadDelay 4000000
+            print "Interrupting"
+            readIORef ref >>= \case
+                Just th -> cancel th
+                Nothing -> return ()
+            print "Master finished."
+    in  do
+        ref <- newIORef Nothing
+        startMaster ref
+        startWorker ref `catch` \e -> let e' = e :: SomeException in startWorker ref    
+        print "ok"
+    
