@@ -9,29 +9,27 @@ module Server
     , app
     ) where
 
-import           HandlersDataTypes
 import           Control.Concurrent          (newEmptyMVar, newMVar, putMVar,
-                                              takeMVar)
-import           Control.Concurrent.Async    (async, cancel)
-import           Control.Exception           (try)
+                                              takeMVar, threadDelay)
 import           Control.Monad.Except        (ExceptT, runExceptT)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Reader
 import           Data.Aeson                  (ToJSON (toEncoding), encode,
                                               fromEncoding, fromJSON, toJSON)
 import           Data.Aeson.Extra            (encodeStrict)
-import qualified Data.ByteString             as B
-import qualified Data.ByteString.Lazy        as BL
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
 import           Database
-import qualified ErrorsReplies               as ER
+import           Database.Redis              (Connection)
+import qualified ErrorsReplies               as R
+import           HandlersDataTypes
 import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (getNow, schedule)
 import           Servant
+
 
 type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
@@ -51,40 +49,39 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
         ask_token (ReqAskToken email) = do
             env <- ask
             let mvar = state env
-                hashed = hashEmail (encodeUtf8 email)
-                hashed_b = encodeStrict hashed
-                asksubmit token = SAsk hashed_b (encodeUtf8 token)
+                hashed = hashEmail email
+                asksubmit token = SAsk (encodeStrict hashed) token
             res <- liftIO $ do
                 (n, gen) <- takeMVar mvar
-                token <- createToken gen (encodeUtf8 email)
+                token <- createToken gen email
                 putMVar mvar (n, gen)
-                sendEmail $ makeSendGridEmail (sendgridconf env) token email
-                connDo (redisconf env) . submit $ asksubmit token
+                sendEmail $ makeSendGridEmail (sendgridconf env) (encodeStrict token) email
+                connDo (redisconn env) . submit $ asksubmit (encodeStrict token)
             case res of
-                Left err  -> return . RespAskToken . ER.renderError $ err
-                Right msg -> return . RespAskToken . ER.renderOk $ msg
+                Left err  -> return . RespAskToken . R.renderError $ err
+                Right msg -> return . RespAskToken . R.renderOk $ msg
 
         confirm_token :: ReqConfirmToken -> AppM RespConfirmToken
         confirm_token (ReqConfirmToken token fingerprint email) = do
-            let confirmsubmit = SConfirm (encodeUtf8 token) (encodeUtf8 fingerprint) (encodeStrict . hashEmail . encodeUtf8 $ email)
+            let confirmsubmit = SConfirm token fingerprint email
             env <- ask
-            res <- liftIO . connDo (redisconf env) . submit $ confirmsubmit
+            res <- liftIO . connDo (redisconn env) . submit $ confirmsubmit
             case res of
-                Left err  -> return $ RespConfirmToken (ER.renderError err) Nothing Nothing
-                Right msg -> return $ RespConfirmToken (ER.renderOk msg) (Just . T.pack . hashEmail . encodeUtf8 $ email) (Just token)
+                Left err  -> return $ RespConfirmToken (R.renderError err) Nothing Nothing
+                Right msg -> return $ RespConfirmToken (R.renderOk msg) (Just $ decodeUtf8 email) (Just $ decodeUtf8 token)
 
         create :: ReqCreate -> AppM RespCreate
-        create (ReqCreate hash token recipe) = do
+        create (ReqCreate hash token recipe startDate endDate) = do
             env <- ask
             liftIO $ do
                 (v, g) <- takeMVar $ state env
                 let pollid = encodeStrict (v+1)
                 now <- getNow
-                res <- connDo (redisconf env) . submit $ 
-                    SPoll (encodeUtf8 hash) (encodeUtf8 token) pollid (encodeUtf8  recipe) (encodeStrict . show $ now) "true"
+                res <- connDo (redisconn env) . submit $
+                    SCreate hash token pollid recipe startDate endDate
                 putMVar (state env) (v+1, g)
                 case res of
-                    Left err -> return . RespCreate . ER.renderError $ err
+                    Left err -> return . RespCreate . R.renderError $ err
                     Right ok -> return $ RespCreate $
                         "Thanks for creating this poll! You can follow the results as they come using this id"
                             `T.append` (T.pack . show $ v+1)
@@ -92,21 +89,20 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
         close :: ReqClose -> AppM RespClose
         close (ReqClose hash token pollid) = do
             env <- ask
-            res <- liftIO . connDo (redisconf env) . submit $
-                SClose (encodeUtf8 hash) (encodeUtf8 token) (encodeStrict pollid)
+            res <- liftIO . connDo (redisconn env) . submit $
+                SClose hash token pollid
             case res of
-                Left err -> return . RespClose . ER.renderError $ err
+                Left err -> return . RespClose . R.renderError $ err
                 Right ok -> return $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)
 
         take :: ReqTake -> AppM RespTake
-        take (ReqPart hash token finger pollid answers) = do
-            let answers_encoded = map (B.concat . BL.toChunks . encode) answers
+        take (ReqTake hash token finger pollid answers) = do
             env <- ask
-            res <- liftIO . connDo (redisconf env) . submit $
-                SAnswer (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeStrict . show $ pollid) answers_encoded
+            res <- liftIO . connDo (redisconn env) . submit $
+                SAnswer hash token finger (encodeStrict . show $ pollid) answers
             case res of
-                Left err  -> return . RespTake . ER.renderError $ err
-                Right msg -> return . RespTake . ER.renderOk $ msg
+                Left err  -> return . RespTake . R.renderError $ err
+                Right msg -> return . RespTake . R.renderOk $ msg
 
         get :: Maybe String -> AppM RespGet
         get (Just pollid) =
@@ -114,7 +110,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 req = SGet pollid_b
             in  do
                 env <- ask
-                res <- liftIO . connDo (redisconf env) . getPoll $ SGet pollid_b
+                res <- liftIO . connDo (redisconn env) . getPoll $ SGet pollid_b
                 case res of
                     Left _ -> return $ RespGet "Unable to find a poll with this id." Nothing Nothing
                     Right (poll, scores) -> return $ RespGet "Ok" (Just poll) (Just scores)
@@ -124,10 +120,16 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
 newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader Config)
 
+data Config = Config {
+    sendgridconf :: SendGridConfig,
+    redisconn    :: Connection,
+    state        :: State
+}
+
 runAppM :: AppM a -> Config -> IO (Either ServerError a)
 runAppM app = runExceptT . runReaderT (unAppM app)
 
-injectEnv :: Config -> AppM a -> Handler a
+injectEnv :: Config -> AppM a -> Servant.Handler a
 injectEnv config app = liftIO (runAppM app config) >>= \case
     Left err -> throwError err
     Right v  -> return v
@@ -138,5 +140,6 @@ app env = simpleCors $ serve api $ hoistServer api (injectEnv env) server
 startApp :: IO ()
 startApp = do
     state <- initState
-    let env = Config initSendgridConfig initRedisConfig state
+    connector <- initRedisConnection
+    let env = Config initSendgridConfig connector state
     run 8080 (app env)

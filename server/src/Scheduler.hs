@@ -39,6 +39,7 @@ schedule s = case isoOrCustom s of
                 threadDelay micros
                 print "Finished."
 
+getNow :: IO UTCTime
 getNow = getCurrentTime
 
 -- main = schedule "2021-03-14T14:15:14+01:00"

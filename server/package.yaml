@@ -34,6 +34,7 @@ dependencies:
 - hedis
 - cryptonite
 - bytestring
+- base64-bytestring
 - memory
 - mtl
 
@@ -48,6 +49,7 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    #- -O2
     dependencies:
     - base
     - pollem
