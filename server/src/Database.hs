@@ -19,6 +19,7 @@ import           ErrorsReplies
 import qualified ErrorsReplies          as R
 import           HandlersDataTypes
 import           Scheduler              (getNow)
+import Data.Maybe
 --
 
 {-- Requests to db: types --}
@@ -31,8 +32,8 @@ data DbReq =
         create_poll_id        :: B.ByteString,
         create_poll_recipe    :: B.ByteString,
         create_poll_startDate :: B.ByteString,
-        create_poll_active    :: B.ByteString
-        } |
+        create_poll_endDate   :: Maybe B.ByteString
+    } |
     SClose  {
         close_hash    :: B.ByteString,
         close_token   :: B.ByteString,
@@ -105,9 +106,14 @@ submit (SConfirm hash fingerprint token) = -- hash generated from the handler, t
                             hmset key [("fingerprint", fingerprint),("verified","true")]
                             return . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
                         else noUser
-submit (SCreate hash token pollid recipe created_date isactive) =
+submit (SCreate hash token pollid recipe startDate endDate) =
     let pollid_txt = decodeUtf8 pollid
         userKey = "user:" `B.append` hash
+        payload =
+            let base = [("author_token", hash),("recipe",recipe),("startDate",startDate),("active","true")]
+            in  case endDate of
+                    Just e  -> ("endDate", e):base
+                    Nothing -> base
     in  exists ("poll:" `B.append` pollid) >>= \case
         Left err -> dbErr
         Right verdict ->
@@ -115,10 +121,13 @@ submit (SCreate hash token pollid recipe created_date isactive) =
             else hgetall userKey >>= \case
                 Left _ -> noUser
                 Right userdata ->
-                    if notIn [("token",token), ("active", "true")] userdata then return . Left . R.Err UserNotVerified $ mempty
-                    else do
-                        hmset ("poll:" `B.append` pollid) [("author_token", hash),("recipe",recipe),("created_date",created_date),("active",isactive)] -- this structure is not typed! perhaps do it
-                        return .  Right . R.Ok $ "Added poll " `T.append` pollid_txt
+                    if notIn [("token",token), ("verified", "true")] userdata then return . Left . R.Err UserNotVerified $ mempty
+                    else multiExec ( do
+                        hmset ("poll:" `B.append` pollid) payload
+                        sadd "polls" [pollid]
+                    ) >>= \case
+                        TxSuccess _ -> return .  Right . R.Ok $ "Added poll " `T.append` pollid_txt
+                        _ -> dbErr
 submit (SClose hash token pollid) =
     let userKey = "user:" `B.append` hash
         pollid_txt = decodeUtf8 pollid
@@ -147,7 +156,7 @@ submit (SAnswer hash token finger pollid answers) =
             return $ (,,,) <$> polldata <*> userdata <*> ismemberH <*> ismemberF
         ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
                         if notIn [("active","true")] pdata  then return . Left . R.Err PollInactive $ pollid_txt else
-                        if notIn [("verified", "true")] udata then return . Left . R.Err UserNotVerified $ decodeUtf8 hash else
+                        if notIn [("token", token),("verified", "true")] udata then return . Left . R.Err UserNotVerified $ decodeUtf8 hash else
                         if isF || isH then return . Left . R.Err PollTakenAlready $ pollid_txt
                         else multiExec ( do
                             sadd ("participants_hashes:" `B.append` pollid) [hash]
@@ -193,11 +202,35 @@ getPoll (SGet pollid) =
             getAnswers p pollid =
                 let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
                 in  lrange key 0 (-1)
---
+
+sweeper :: Redis (Either (Err T.Text) [(B.ByteString, B.ByteString)])
+sweeper = smembers "polls" >>= \case
+    Left _ -> dbErr
+    Right ids -> traverse collectEndifExists ids >>= \res -> return . Right . catMaybes $ res
+    where
+        collectEndifExists :: B.ByteString -> Redis (Maybe (B.ByteString, B.ByteString))
+        collectEndifExists i =
+            let pollid = "poll:" `B.append` i
+            in  hget pollid "endDate" >>= \case
+                Left err -> return Nothing
+                Right maybeEnd -> case maybeEnd of
+                    Nothing -> return Nothing
+                    Just e -> return . Just $ (pollid, e)
+    --
 
 {- Tests -}
 
 --
+main = do
+    response <- connDo initRedisConfig $ sweeper >>= \case
+        Left err -> return . show $ renderError  err
+        Right res -> return . show $ res
+    print response
+
+main' = connDo initRedisConfig $ smembers "polls" >>= \case
+    Left err -> liftIO . print $ err
+    Right ids -> liftIO . print $ ids
+
 tCreateUser :: Redis (Either Reply Status)
 tCreateUser =
     let token = "23232"
@@ -210,10 +243,9 @@ tCreatePoll hash now =
     let poll = mockPoll
         pollid = "1"
         recipe = encodeStrict poll
-        isactive = "true"
         token = "token1"
         date_now d = encodeStrict . show $ d
-    in  submit $ SCreate hash token pollid recipe now isactive
+    in  submit $ SCreate hash token pollid recipe now Nothing
 
 tSubmitAnswers :: Redis (Either (Err T.Text) (Ok T.Text))
 tSubmitAnswers =

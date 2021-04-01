@@ -77,7 +77,9 @@ instance FromJSON ReqConfirmToken where
 data ReqCreate = ReqCreate {
     req_create_hash   :: B.ByteString,
     req_create_token  :: B.ByteString,
-    req_create_recipe :: B.ByteString
+    req_create_recipe :: B.ByteString,
+    req_create_startDate :: B.ByteString,
+    req_create_endDate :: Maybe B.ByteString
 } deriving (Eq, Show)
 
 instance FromJSON ReqCreate where
@@ -85,7 +87,13 @@ instance FromJSON ReqCreate where
         req_create_hash <- obj .: "req_create_hash"
         req_create_token <- obj .: "req_create_token"
         req_create_recipe <- obj .: "req_create_recipe"
-        return (ReqCreate { req_create_hash = req_create_hash, req_create_token = req_create_token, req_create_recipe = req_create_recipe})
+        req_create_startDate <- obj .: "req_create_startDate"
+        req_create_endDate <- obj .: "req_create_endDate"
+
+        return (ReqCreate { 
+            req_create_hash = req_create_hash, req_create_token = req_create_token, req_create_recipe = req_create_recipe,
+            req_create_startDate = req_create_startDate, req_create_endDate = req_create_endDate
+        })
 
 data ReqClose = ReqClose {
     close_hash   :: B.ByteString,

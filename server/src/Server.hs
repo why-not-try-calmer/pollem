@@ -69,14 +69,14 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 Right msg -> return $ RespConfirmToken (ER.renderOk msg) (Just $ decodeUtf8 email) (Just $ decodeUtf8 token)
 
         create :: ReqCreate -> AppM RespCreate
-        create (ReqCreate hash token recipe) = do
+        create (ReqCreate hash token recipe startDate endDate) = do
             env <- ask
             liftIO $ do
                 (v, g) <- takeMVar $ state env
                 let pollid = encodeStrict (v+1)
                 now <- getNow
                 res <- connDo (redisconf env) . submit $
-                    SCreate hash token pollid recipe (encodeStrict . show $ now) "true"
+                    SCreate hash token pollid recipe startDate endDate
                 putMVar (state env) (v+1, g)
                 case res of
                     Left err -> return . RespCreate . ER.renderError $ err
