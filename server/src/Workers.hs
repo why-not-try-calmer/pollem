@@ -6,7 +6,6 @@ import           Control.Concurrent.Async
 import           Control.Exception
 import           Control.Monad
 import           Control.Monad.IO.Class   (liftIO)
-import           Data.IORef
 import           Database                 (_connDo, connDo, disablePolls,
                                            initRedisConnection, sweeper)
 import           Database.Redis           (Connection)
@@ -15,7 +14,7 @@ import           Scheduler                (getNow, isoOrCustom)
 
 runSweeper :: Connection -> IO ()
 runSweeper conn =
-    let startWorker ref =
+    let startWorker =
             withAsync (forever $ do
                 print "Sweeping once and then sleeping for one hour..."
                 now <- getNow
@@ -31,7 +30,7 @@ runSweeper conn =
                     Right msg -> print . R.renderOk $ msg
                 threadDelay $ 10000000 * 3600
             ) wait
-    in  newIORef Nothing >>= \ref -> startWorker ref `catch` \e -> let e' = e :: SomeException in startWorker ref
+    in  startWorker `catch` \e -> let e' = e :: SomeException in startWorker
 
 main :: IO ()
 main = do
