@@ -5,18 +5,15 @@
     A simple, hassle-free and performant polling application written in Haskell.
   </p>
   <requests></requests>
-  <visualizer v-if="ready"></visualizer>
 </template>
 
 <script>
 import Requests from "./components/Requests.vue";
-import Visualizer from './components/Visualizer.vue';
 
 export default {
   name: "App",
   components: {
-    Requests,
-    Visualizer
+    Requests
   },
   data: () => {
     return {

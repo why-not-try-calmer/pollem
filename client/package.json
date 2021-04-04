@@ -9,10 +9,10 @@
   },
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^3.0.7",
-    "@j-t-mcc/vue3-chartjs": "^0.3.0",
     "@meforma/vue-toaster": "^1.2.2",
     "core-js": "^3.6.5",
-    "vue": "^3.0.0"
+    "vue": "^3.0.0",
+    "vue3-echarts": "^1.0.3"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "~4.5.0",

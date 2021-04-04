@@ -1,49 +1,35 @@
 <template>
-  <div
-    style="margin: auto; height: 600px; width: 600px; display: flex; flex-direction: column"
-  >
-    <button type="submit" @click="exportChart">Export Chart as PNG</button>
-    <vue3-chart-js
-      :id="doughnutChart.id"
-      ref="chartRef"
-      :type="doughnutChart.type"
-      :data="doughnutChart.data"
-    ></vue3-chart-js>
-  </div>
+  <vue-echarts :option="option" style="height: 500px" ref="chart" />
 </template>
 <script>
-import { ref } from "vue";
-import Vue3ChartJs from "@j-t-mcc/vue3-chartjs";
+import { VueEcharts } from "vue3-echarts";
 export default {
-  name: "Visualizer",
-  components: Vue3ChartJs,
-  setup() {
-    const chartRef = ref(null);
-    const doughnutChart = {
-      id: "doughnut",
-      type: "doughnut",
-      data: {
-        labels: ["VueJs", "EmberJs", "ReactJs", "AngularJs"],
-        datasets: [
+  name: "visualizer",
+  components: {
+    VueEcharts
+  },
+  data: () => {
+    return {
+      option: {
+        xAxis: {
+          type: "category",
+          data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        },
+        yAxis: {
+          type: "value",
+        },
+        series: [
           {
-            backgroundColor: ["#41B883", "#E46651", "#00D8FF", "#DD1B16"],
-            data: [40, 20, 80, 10],
+            data: [120, 200, 150, 80, 70, 110, 130],
+            type: "bar",
+            showBackground: true,
+            backgroundStyle: {
+              color: "rgba(180, 180, 180, 0.2)",
+            },
           },
         ],
       },
     };
-    const exportChart = () => {
-      let a = document.createElement("a");
-      a.href = chartRef.value.chartJSState.chart.toBase64Image();
-      a.download = "image-export.png";
-      a.click();
-      a = null;
-    };
-    return {
-      chartRef,
-      doughnutChart,
-      exportChart,
-    }
   },
 };
 </script>

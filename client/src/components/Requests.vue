@@ -2,10 +2,14 @@
   <div>
     <p>Your fingerprint: {{ user.fingerprint }}</p>
     <button v-on:click="create_poll">Create a poll</button>
+    <p>
+      <visualizer></visualizer>
+    </p>
   </div>
 </template>
 
 <script>
+import Visualizer from "./Visualizer.vue";
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
 const Errors = {
   taken: "Sorry but you appear to have taken the survey already.",
@@ -61,7 +65,10 @@ const Requests = {
   },
 };
 export default {
-  name: "Requests",
+  name: "requests",
+  components: {
+    Visualizer,
+  },
   data: () => {
     return {
       poll: {
