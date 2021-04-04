@@ -3,20 +3,22 @@
     <p>Your fingerprint: {{ user.fingerprint }}</p>
     <button v-on:click="create_poll">Create a poll</button>
     <p>
-      <visualizer></visualizer>
+      <vue-echarts :option="option" style="height: 500px" ref="chart" />
     </p>
   </div>
 </template>
 
 <script>
-import Visualizer from "./Visualizer.vue";
+import { VueEcharts } from "vue3-echarts";
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
+
 const Errors = {
   taken: "Sorry but you appear to have taken the survey already.",
   noLocalStorage:
     "`localStorage API` not supported, this application will not work properly.",
   noCookieSet: "Sorry but you appear to have cleared your cookies",
 };
+
 const Storage = {
   checks(fingerprint) {
     if (!localStorage) {
@@ -41,6 +43,7 @@ const Storage = {
     return JSON.parse(localStorage.getItem("pollem-user"));
   },
 };
+
 const Requests = {
   endpoint: "http://localhost:8080",
   headers: { Accept: "application/json", "Content-type": "application/json" },
@@ -64,10 +67,11 @@ const Requests = {
     else throw new Error("Wrong route: " + route);
   },
 };
+
 export default {
   name: "requests",
   components: {
-    Visualizer,
+    VueEcharts,
   },
   data: () => {
     return {
@@ -87,6 +91,25 @@ export default {
         hash: "",
         email: "",
         fingerprint: "",
+      },
+      option: {
+        xAxis: {
+          type: "category",
+          data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        },
+        yAxis: {
+          type: "value",
+        },
+        series: [
+          {
+            data: [120, 200, 150, 80, 70, 110, 130],
+            type: "bar",
+            showBackground: true,
+            backgroundStyle: {
+              color: "rgba(180, 180, 180, 0.2)",
+            },
+          },
+        ],
       },
     };
   },
