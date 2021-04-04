@@ -3,7 +3,7 @@
     <p>Your fingerprint: {{ user.fingerprint }}</p>
     <button v-on:click="create_poll">Create a poll</button>
     <p>
-      <vue-echarts :option="option" style="height: 500px" ref="chart" />
+      <vue-echarts :option="option" style="margin: 0 auto; height: 200px; width: 600px" ref="chart" />
     </p>
   </div>
 </template>
@@ -83,7 +83,6 @@ export default {
         multiple: null,
         visible: null,
         answers: [],
-        other_answers: [],
         id: null,
       },
       user: {
@@ -93,18 +92,18 @@ export default {
         fingerprint: "",
       },
       option: {
-        xAxis: {
-          type: "category",
-          data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        },
         yAxis: {
+          type: "category",
+          data: ["Question 1", "Question 2", "Question 3", "Q4", "Q5", "Q6", "Q7"],
+        },
+        xAxis: {
           type: "value",
         },
         series: [
           {
             data: [120, 200, 150, 80, 70, 110, 130],
             type: "bar",
-            showBackground: true,
+            showBackground: false,
             backgroundStyle: {
               color: "rgba(180, 180, 180, 0.2)",
             },
