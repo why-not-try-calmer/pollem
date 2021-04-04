@@ -1,15 +1,20 @@
 <template>
-  <img alt="Vue logo" src="./assets/logo.png">
-  <HelloWorld msg="Welcome to Your Vue.js App"/>
+  <img alt="bees" src="./assets/bees_thumb.png" style="width: 25%">
+  <h3>Poll'em</h3>
+  <p>A simple, hassle-free and performant polling application written in Haskell.</p>
+  <requests></requests>
+  <!-- <visualizer></visualizer> -->
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue'
+import Requests from './components/Requests.vue'
+//import Visualizer from './components/Visualizer.vue'
 
 export default {
   name: 'App',
   components: {
-    HelloWorld
+    Requests,
+    //Visualizer
   }
 }
 </script>
