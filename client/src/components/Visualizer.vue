@@ -1,19 +1,21 @@
 <template>
-  <div style="height:600px;width: 600px; display: flex;flex-direction:column;">
+  <div
+    style="margin: auto; height: 600px; width: 600px; display: flex; flex-direction: column"
+  >
     <button type="submit" @click="exportChart">Export Chart as PNG</button>
     <vue3-chart-js
-        :id="doughnutChart.id"
-        ref="chartRef"
-        :type="doughnutChart.type"
-        :data="doughnutChart.data"
+      :id="doughnutChart.id"
+      ref="chartRef"
+      :type="doughnutChart.type"
+      :data="doughnutChart.data"
     ></vue3-chart-js>
   </div>
 </template>
 <script>
-import { ref } from 'vue'
-import Vue3ChartJs from '@j-t-mcc/vue3-chartjs'
+import { ref } from "vue";
+import Vue3ChartJs from "@j-t-mcc/vue3-chartjs";
 export default {
-  name: "visualizer",
+  name: "Visualizer",
   components: Vue3ChartJs,
   setup() {
     const chartRef = ref(null);
@@ -30,7 +32,6 @@ export default {
         ],
       },
     };
-
     const exportChart = () => {
       let a = document.createElement("a");
       a.href = chartRef.value.chartJSState.chart.toBase64Image();
@@ -38,12 +39,11 @@ export default {
       a.click();
       a = null;
     };
-
     return {
       chartRef,
       doughnutChart,
       exportChart,
-    };
+    }
   },
 };
 </script>

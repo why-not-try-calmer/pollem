@@ -5,7 +5,7 @@
     A simple, hassle-free and performant polling application written in Haskell.
   </p>
   <requests></requests>
-  <visualizer></visualizer>
+  <visualizer v-if="ready"></visualizer>
 </template>
 
 <script>
@@ -17,6 +17,14 @@ export default {
   components: {
     Requests,
     Visualizer
+  },
+  data: () => {
+    return {
+      ready: false
+    }
+  },
+  mounted() {
+    this.ready = true;
   }
 };
 </script>

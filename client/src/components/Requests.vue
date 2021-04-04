@@ -61,7 +61,7 @@ const Requests = {
   },
 };
 export default {
-  name: "requests",
+  name: "Requests",
   data: () => {
     return {
       poll: {
