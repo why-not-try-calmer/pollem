@@ -101,9 +101,7 @@ export default {
         Requests.preReq(payload)
       )
         .then((res) => this.$toast.success(JSON.parse(res)))
-        .catch((err) =>
-          this.$toast.error(err)
-        );
+        .catch((err) => this.$toast.error(err));
     },
     ask_token() {
       const payload = {
