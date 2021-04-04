@@ -45,7 +45,6 @@ data Poll = Poll {
     poll_multiple            :: Bool,
     poll_visible             :: Bool,
     poll_answers             :: [T.Text],
-    poll_other_answers       :: Maybe [T.Text],
     poll_creator_fingerprint :: T.Text,
     poll_creator_token       :: T.Text
 } deriving (Eq, Show)
@@ -167,7 +166,6 @@ mockPoll = Poll {
         poll_multiple = True,
         poll_visible = True,
         poll_answers = ["First", "Second", "Third"],
-        poll_other_answers = Just ["OptFourth", "OptFifth"],
         poll_creator_fingerprint = "0x01",
         poll_creator_token = "lksdlksodi"
     }
