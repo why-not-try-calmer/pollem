@@ -29,6 +29,7 @@ dependencies:
 - async
 - text
 - containers
+- unordered-containers
 - wai-cors
 - req
 - hedis

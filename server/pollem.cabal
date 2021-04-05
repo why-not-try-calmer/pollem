@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d14dde9ab9cdf2124c3893a4e25b6dcc9c73f0e3182d5bb3615364dd6555d006
+-- hash: 2904dd0b4a2768f9e8151ca51e6a69fbc8a32816ccb5df5f653a94db96dc4d48
 
 name:           pollem
 version:        0.1.0.0
@@ -52,6 +52,7 @@ library
     , servant-server
     , text
     , time
+    , unordered-containers
     , wai
     , wai-cors
     , warp
@@ -81,6 +82,7 @@ executable server-exe
     , servant-server
     , text
     , time
+    , unordered-containers
     , wai
     , wai-cors
     , warp
@@ -114,6 +116,7 @@ test-suite server-test
     , servant-server
     , text
     , time
+    , unordered-containers
     , wai
     , wai-cors
     , warp

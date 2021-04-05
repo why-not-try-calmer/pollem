@@ -7,7 +7,6 @@
 
 module Mailer where
 
-import           Control.Concurrent     (putMVar, takeMVar)
 import           Control.Monad.IO.Class
 import           Data.Aeson
 import           Data.Aeson.TH

@@ -16,6 +16,7 @@ import qualified Data.Aeson                 as J
 import           Data.Aeson.TH
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Base64     as B64
+import qualified Data.HashMap.Strict        as HMS
 import qualified Data.Text                  as T
 import           Data.Text.Encoding         (encodeUtf8)
 --
@@ -170,12 +171,17 @@ mockPoll = Poll {
         poll_creator_token = "lksdlksodi"
     }
 
-type State = MVar (Integer, SystemDRG)
+type PollCreator = MVar (Integer, SystemDRG)
 
-initState :: IO State
+type PollCache = MVar (HMS.HashMap String (Poll, [Int]))
+
+initState :: IO PollCreator
 initState = do
     drg <- getSystemDRG
     newMVar (0, drg)
+
+initCache :: IO PollCache
+initCache = newMVar HMS.empty
 --
 
 {- Token -}
