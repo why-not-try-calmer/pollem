@@ -96,7 +96,8 @@ export default {
         email: "",
         fingerprint: "",
       },
-      renderChart: false
+      renderChart: false,
+      chartOptions: null
     };
   },
   mounted() {
@@ -107,51 +108,33 @@ export default {
         this.user.fingerprint = fingerprint;
         return Storage.checks(fingerprint)
           .catch((err) => this.$toast.error(err))
-          .then((res) => {
+          .then(() => {
             this.$toast.warning("Loading results...")
-            setTimeout(() => { 
-              this.renderChart = true
-              this.$toast.info(res)
-            }, 2000 )
+            return fetch ("http://www.randomnumberapi.com/api/v1.0/random?min=100&max=1000&count=5")
+          })
+          .catch(err => this.$toast.error(err))
+          .then(res => res.json())
+          .then(data_json => {
+            let answers = data_json.map(d => parseInt(d))
+            this.setChart(answers, answers)
+            this.renderChart = true
+            this.$toast.success("App finished loading.")
           })
       });
   },
-  computed: {
-    chartOptions() {
-      return {
-        yAxis: {
-          type: "category",
-          data: ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"],
-        },
-        xAxis: {
-          type: "value",
-        },
-        series: [
-          {
-            data: [120, 200, 150, 80, 70, 110, 130],
-            type: "bar",
-            showBackground: false,
-            backgroundStyle: {
-              color: "rgba(180, 180, 180, 0.2)",
-            },
-          },
-        ],
-      }
-    }
-  },
   methods: {
-    buildChart() {
-      this.option = {
+    setChart(questions, answers) {
+      this.chartOptions = {
         yAxis: {
           type: "category",
-          data: ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"],
+          data: questions,
         },
         xAxis: {
           type: "value",
         },
         series: [
           {
-            data: [120, 200, 150, 80, 70, 110, 130],
+            data: answers,
             type: "bar",
             showBackground: false,
             backgroundStyle: {
