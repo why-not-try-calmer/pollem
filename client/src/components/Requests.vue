@@ -3,7 +3,12 @@
     <p>Your fingerprint: {{ user.fingerprint }}</p>
     <button v-on:click="create_poll">Create a poll</button>
     <p>
-      <vue-echarts :option="option" style="margin: 0 auto; height: 200px; width: 600px" ref="chart" />
+      <vue-echarts
+        v-if="renderChart"
+        :option="chartOptions"
+        style="margin: 0 auto; height: 300px; width: 900px"
+        ref="chart"
+      />
     </p>
   </div>
 </template>
@@ -91,10 +96,32 @@ export default {
         email: "",
         fingerprint: "",
       },
-      option: {
+      renderChart: false
+    };
+  },
+  mounted() {
+    FingerprintJS.load()
+      .then((fp) => fp.get())
+      .then((result) => {
+        const fingerprint = result.visitorId;
+        this.user.fingerprint = fingerprint;
+        return Storage.checks(fingerprint)
+          .catch((err) => this.$toast.error(err))
+          .then((res) => {
+            this.$toast.warning("Loading results...")
+            setTimeout(() => { 
+              this.renderChart = true
+              this.$toast.info(res)
+            }, 2000 )
+          })
+      });
+  },
+  computed: {
+    chartOptions() {
+      return {
         yAxis: {
           type: "category",
-          data: ["Question 1", "Question 2", "Question 3", "Q4", "Q5", "Q6", "Q7"],
+          data: ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"],
         },
         xAxis: {
           type: "value",
@@ -109,21 +136,31 @@ export default {
             },
           },
         ],
-      },
-    };
-  },
-  mounted() {
-    FingerprintJS.load()
-      .then((fp) => fp.get())
-      .then((result) => {
-        const fingerprint = result.visitorId;
-        this.user.fingerprint = fingerprint;
-        return Storage.checks(fingerprint)
-          .catch((err) => this.$toast.error(err))
-          .then((res) => this.$toast.info(res));
-      });
+      }
+    }
   },
   methods: {
+    buildChart() {
+      this.option = {
+        yAxis: {
+          type: "category",
+          data: ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"],
+        },
+        xAxis: {
+          type: "value",
+        },
+        series: [
+          {
+            data: [120, 200, 150, 80, 70, 110, 130],
+            type: "bar",
+            showBackground: false,
+            backgroundStyle: {
+              color: "rgba(180, 180, 180, 0.2)",
+            },
+          },
+        ],
+      }
+    },
     makeReq(route, payload) {
       return fetch(
         Requests.endpoint + Requests.tryRoute(route),
