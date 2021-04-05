@@ -39,6 +39,13 @@ schedule s = case isoOrCustom s of
                 threadDelay micros
                 print "Finished."
 
+olderThanOneMonth d now =
+    let diff = utcTimeToPOSIXSeconds d - systemToPOSIXTime now
+        secs = fst . properFraction . nominalDiffTimeToSeconds $ diff
+        oneMonth = 2592000
+    in secs > oneMonth
+
+
 getNow :: IO UTCTime
 getNow = getCurrentTime
 

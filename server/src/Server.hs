@@ -30,7 +30,7 @@ import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (getNow, schedule)
 import           Servant
-
+import Workers
 
 type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
@@ -112,14 +112,15 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
             in  do
                 env <- ask
                 liftIO $ do
+                    now <- getNow
                     hmap <- readMVar . pollcache $ env
                     res <- case HMS.lookup pollid hmap of
-                        Just (poll, scores) -> return $ Right (poll, scores)
+                        Just (poll, scores, _) -> return $ Right (poll, scores)
                         Nothing -> connDo (redisconn env) . getPoll $ SGet pollid_b
                     case res of
                         Left _ -> return $ RespGet "Unable to find a poll with this id." Nothing Nothing
                         Right (poll, scores) -> do
-                            modifyMVar_ (pollcache env) (\_ -> return $ HMS.insert pollid (poll, scores) hmap)
+                            modifyMVar_ (pollcache env) (\_ -> return $ HMS.insert pollid (poll, scores, now) hmap)
                             return $ RespGet "Ok" (Just poll) (Just scores)
         get Nothing = return $ RespGet "Missing poll identifier." Nothing Nothing
 
@@ -151,4 +152,5 @@ startApp = do
     cache <- initCache
     connector <- initRedisConnection
     let env = Config initSendgridConfig connector state cache
+    runSweeperWorker  cache
     run 8080 (app env)

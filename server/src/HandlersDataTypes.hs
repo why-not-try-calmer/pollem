@@ -19,6 +19,7 @@ import qualified Data.ByteString.Base64     as B64
 import qualified Data.HashMap.Strict        as HMS
 import qualified Data.Text                  as T
 import           Data.Text.Encoding         (encodeUtf8)
+import Data.Time (UTCTime(UTCTime))
 --
 
 {- Instantiating JSON as bytestringss to avoid over parsing -}
@@ -173,7 +174,7 @@ mockPoll = Poll {
 
 type PollCreator = MVar (Integer, SystemDRG)
 
-type PollCache = MVar (HMS.HashMap String (Poll, [Int]))
+type PollCache = MVar (HMS.HashMap String (Poll, [Int], UTCTime))
 
 initState :: IO PollCreator
 initState = do

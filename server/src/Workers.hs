@@ -10,10 +10,13 @@ import           Database                 (_connDo, connDo, disablePolls,
                                            initRedisConnection, sweeper)
 import           Database.Redis           (Connection)
 import qualified ErrorsReplies            as R
-import           Scheduler                (getNow, isoOrCustom)
+import           Scheduler                (getNow, isoOrCustom, olderThanOneMonth)
+import HandlersDataTypes (PollCache)
+import qualified Data.HashMap.Strict as HMS
+import Data.Time.Clock.System (getSystemTime)
 
-sweeperWorker :: Connection -> IO ()
-sweeperWorker conn = withAsync ( do
+sweeperWorker :: Connection -> PollCache -> IO ()
+sweeperWorker conn mvar = withAsync ( do
     print "Sweeping once and then sleeping for one hour..."
     now <- getNow
     res <- connDo conn $ sweeper >>= \case
@@ -26,10 +29,12 @@ sweeperWorker conn = withAsync ( do
     case res of
         Left err  -> print . R.renderError $ err
         Right msg -> print . R.renderOk $ msg
+    now_system <- getSystemTime
+    modifyMVar_ mvar $ return . HMS.filter (\(_,_,date) -> olderThanOneMonth date now_system)
     threadDelay $ 1000000 * 3600
     ) wait
 
-runSweeperWorker :: IO ()
-runSweeperWorker = initRedisConnection >>= \conn -> forever $ sweeperWorker conn `catch` \e ->
+runSweeperWorker :: PollCache -> IO ()
+runSweeperWorker mvar = initRedisConnection >>= \conn -> forever $ sweeperWorker conn mvar `catch` \e ->
     let e' = e :: SomeException
     in  print "caught exception, restarting..."
