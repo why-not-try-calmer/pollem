@@ -30,7 +30,7 @@ import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
 import           Scheduler                   (getNow, schedule)
 import           Servant
-import Workers
+import           Workers
 
 type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
@@ -152,5 +152,5 @@ startApp = do
     cache <- initCache
     connector <- initRedisConnection
     let env = Config initSendgridConfig connector state cache
-    runSweeperWorker  cache
+    runSweeperWorker cache
     run 8080 (app env)
