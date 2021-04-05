@@ -9,7 +9,7 @@ module Server
     , app
     ) where
 
-import           Control.Concurrent          (newEmptyMVar, newMVar, putMVar,
+import           Control.Concurrent          (readMVar, putMVar,
                                               takeMVar, threadDelay)
 import           Control.Monad.Except        (ExceptT, runExceptT)
 import           Control.Monad.IO.Class      (liftIO)
@@ -23,6 +23,7 @@ import           Database
 import           Database.Redis              (Connection)
 import qualified ErrorsReplies               as R
 import           HandlersDataTypes
+import qualified Data.HashMap.Strict as HMS
 import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
@@ -52,9 +53,9 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 hashed = hashEmail email
                 asksubmit token = SAsk (encodeStrict hashed) token
             res <- liftIO $ do
-                (n, gen) <- takeMVar mvar
+                (n, gen, h) <- takeMVar mvar
                 token <- createToken gen email
-                putMVar mvar (n, gen)
+                putMVar mvar (n, gen, h)
                 sendEmail $ makeSendGridEmail (sendgridconf env) (encodeStrict token) email
                 connDo (redisconn env) . submit $ asksubmit (encodeStrict token)
             case res of
@@ -74,12 +75,12 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
         create (ReqCreate hash token recipe startDate endDate) = do
             env <- ask
             liftIO $ do
-                (v, g) <- takeMVar $ state env
+                (v, g, h) <- takeMVar $ state env
                 let pollid = encodeStrict (v+1)
                 now <- getNow
                 res <- connDo (redisconn env) . submit $
                     SCreate hash token pollid recipe startDate endDate
-                putMVar (state env) (v+1, g)
+                putMVar (state env) (v+1, g, h)
                 case res of
                     Left err -> return . RespCreate . R.renderError $ err
                     Right ok -> return $ RespCreate $
@@ -110,7 +111,11 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 req = SGet pollid_b
             in  do
                 env <- ask
-                res <- liftIO . connDo (redisconn env) . getPoll $ SGet pollid_b
+                res <- liftIO $ do
+                    (_,_, hmap) <- readMVar . state $ env
+                    case HMS.lookup pollid hmap of
+                        Just (poll, scores) -> return $ Right (poll, scores)
+                        Nothing -> connDo (redisconn env) . getPoll $ SGet pollid_b
                 case res of
                     Left _ -> return $ RespGet "Unable to find a poll with this id." Nothing Nothing
                     Right (poll, scores) -> return $ RespGet "Ok" (Just poll) (Just scores)

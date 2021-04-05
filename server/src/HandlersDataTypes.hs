@@ -18,6 +18,7 @@ import qualified Data.ByteString            as B
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.Text                  as T
 import           Data.Text.Encoding         (encodeUtf8)
+import qualified Data.HashMap.Strict as HMS
 --
 
 {- Instantiating JSON as bytestringss to avoid over parsing -}
@@ -170,12 +171,12 @@ mockPoll = Poll {
         poll_creator_token = "lksdlksodi"
     }
 
-type State = MVar (Integer, SystemDRG)
+type State = MVar (Integer, SystemDRG, HMS.HashMap String (Poll, [Int]))
 
 initState :: IO State
 initState = do
     drg <- getSystemDRG
-    newMVar (0, drg)
+    newMVar (0, drg, HMS.empty)
 --
 
 {- Token -}
