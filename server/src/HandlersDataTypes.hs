@@ -42,11 +42,9 @@ data Poll = Poll {
     poll_endDate             :: Maybe T.Text,
     poll_question            :: T.Text ,
     poll_description         :: T.Text,
-    poll_id                  :: Int,
     poll_multiple            :: Bool,
     poll_visible             :: Bool,
     poll_answers             :: [T.Text],
-    poll_other_answers       :: Maybe [T.Text],
     poll_creator_fingerprint :: T.Text,
     poll_creator_token       :: T.Text
 } deriving (Eq, Show)
@@ -165,11 +163,9 @@ mockPoll = Poll {
         poll_description = "A description",
         poll_startDate = "2021-03-14T14:15:14+01:00",
         poll_endDate = Just "2021-03-16T14:15:14+01:00",
-        poll_id = 42,
         poll_multiple = True,
         poll_visible = True,
         poll_answers = ["First", "Second", "Third"],
-        poll_other_answers = Just ["OptFourth", "OptFifth"],
         poll_creator_fingerprint = "0x01",
         poll_creator_token = "lksdlksodi"
     }
