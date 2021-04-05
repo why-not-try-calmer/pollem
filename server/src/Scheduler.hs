@@ -6,7 +6,7 @@ import           Data.Time                (ZonedTime, defaultTimeLocale,
 import           Data.Time.Clock
 import           Data.Time.Clock.POSIX    (systemToPOSIXTime,
                                            utcTimeToPOSIXSeconds)
-import           Data.Time.Clock.System   (getSystemTime)
+import           Data.Time.Clock.System   (getSystemTime, SystemTime)
 import           Data.Time.Format.ISO8601 (iso8601ParseM)
 
 
@@ -39,6 +39,7 @@ schedule s = case isoOrCustom s of
                 threadDelay micros
                 print "Finished."
 
+olderThanOneMonth :: UTCTime -> SystemTime -> Bool
 olderThanOneMonth d now =
     let diff = utcTimeToPOSIXSeconds d - systemToPOSIXTime now
         secs = fst . properFraction . nominalDiffTimeToSeconds $ diff
