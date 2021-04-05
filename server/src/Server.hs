@@ -9,7 +9,7 @@ module Server
     , app
     ) where
 
-import           Control.Concurrent          (readMVar, putMVar,
+import           Control.Concurrent          (modifyMVar_, putMVar, readMVar,
                                               takeMVar, threadDelay)
 import           Control.Monad.Except        (ExceptT, runExceptT)
 import           Control.Monad.IO.Class      (liftIO)
@@ -17,13 +17,13 @@ import           Control.Monad.Reader
 import           Data.Aeson                  (ToJSON (toEncoding), encode,
                                               fromEncoding, fromJSON, toJSON)
 import           Data.Aeson.Extra            (encodeStrict)
+import qualified Data.HashMap.Strict         as HMS
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
 import           Database
 import           Database.Redis              (Connection)
 import qualified ErrorsReplies               as R
 import           HandlersDataTypes
-import qualified Data.HashMap.Strict as HMS
 import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
@@ -49,13 +49,13 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
         ask_token :: ReqAskToken -> AppM RespAskToken
         ask_token (ReqAskToken email) = do
             env <- ask
-            let mvar = state env
+            let mvar = pollmanager env
                 hashed = hashEmail email
                 asksubmit token = SAsk (encodeStrict hashed) token
             res <- liftIO $ do
-                (n, gen, h) <- takeMVar mvar
+                (n, gen) <- takeMVar mvar
                 token <- createToken gen email
-                putMVar mvar (n, gen, h)
+                putMVar mvar (n, gen)
                 sendEmail $ makeSendGridEmail (sendgridconf env) (encodeStrict token) email
                 connDo (redisconn env) . submit $ asksubmit (encodeStrict token)
             case res of
@@ -75,12 +75,12 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
         create (ReqCreate hash token recipe startDate endDate) = do
             env <- ask
             liftIO $ do
-                (v, g, h) <- takeMVar $ state env
+                (v, g) <- takeMVar $ pollmanager env
                 let pollid = encodeStrict (v+1)
                 now <- getNow
                 res <- connDo (redisconn env) . submit $
                     SCreate hash token pollid recipe startDate endDate
-                putMVar (state env) (v+1, g, h)
+                putMVar (pollmanager env) (v+1, g)
                 case res of
                     Left err -> return . RespCreate . R.renderError $ err
                     Right ok -> return $ RespCreate $
@@ -111,14 +111,16 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 req = SGet pollid_b
             in  do
                 env <- ask
-                res <- liftIO $ do
-                    (_,_, hmap) <- readMVar . state $ env
-                    case HMS.lookup pollid hmap of
+                liftIO $ do
+                    hmap <- readMVar . pollcache $ env
+                    res <- case HMS.lookup pollid hmap of
                         Just (poll, scores) -> return $ Right (poll, scores)
                         Nothing -> connDo (redisconn env) . getPoll $ SGet pollid_b
-                case res of
-                    Left _ -> return $ RespGet "Unable to find a poll with this id." Nothing Nothing
-                    Right (poll, scores) -> return $ RespGet "Ok" (Just poll) (Just scores)
+                    case res of
+                        Left _ -> return $ RespGet "Unable to find a poll with this id." Nothing Nothing
+                        Right (poll, scores) -> do
+                            modifyMVar_ (pollcache env) (\_ -> return $ HMS.insert pollid (poll, scores) hmap)
+                            return $ RespGet "Ok" (Just poll) (Just scores)
         get Nothing = return $ RespGet "Missing poll identifier." Nothing Nothing
 
 
@@ -128,7 +130,8 @@ newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }
 data Config = Config {
     sendgridconf :: SendGridConfig,
     redisconn    :: Connection,
-    state        :: State
+    pollmanager  :: PollCreator,
+    pollcache    :: PollCache
 }
 
 runAppM :: AppM a -> Config -> IO (Either ServerError a)
@@ -145,6 +148,7 @@ app env = simpleCors $ serve api $ hoistServer api (injectEnv env) server
 startApp :: IO ()
 startApp = do
     state <- initState
+    cache <- initCache
     connector <- initRedisConnection
-    let env = Config initSendgridConfig connector state
+    let env = Config initSendgridConfig connector state cache
     run 8080 (app env)
