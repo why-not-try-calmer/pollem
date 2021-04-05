@@ -37,7 +37,7 @@ type API =
     "confirm_token" :> ReqBody '[JSON] ReqConfirmToken :> Post '[JSON] RespConfirmToken :<|>
     "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespCreate :<|>
     "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
-    "get" :> QueryParam "id" String :> Get '[JSON] RespGet :<|>
+    "get" :> QueryParam "poll_id" String :> Get '[JSON] RespGet :<|>
     "take" :> ReqBody '[JSON] ReqTake :> Post '[JSON] RespTake
 
 api :: Proxy API

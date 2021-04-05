@@ -17,7 +17,8 @@ export default {
   },
   data: () => {
     return {
-      ready: false
+      ready: false,
+      pollid: null
     }
   },
   mounted() {

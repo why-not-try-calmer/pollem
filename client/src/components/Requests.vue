@@ -97,7 +97,7 @@ export default {
         fingerprint: "",
       },
       renderChart: false,
-      chartOptions: null
+      chartOptions: null,
     };
   },
   mounted() {
@@ -109,32 +109,36 @@ export default {
         return Storage.checks(fingerprint)
           .catch((err) => this.$toast.error(err))
           .then(() => {
-            this.$toast.warning("Loading results...")
-            return fetch ("http://www.randomnumberapi.com/api/v1.0/random?min=100&max=1000&count=5")
+            let uri = window.location.search.substring(1);
+            this.poll.id = new URLSearchParams(uri).get("poll_id");
+            this.$toast.warning("Loading results...");
+            return fetch(Requests.endpoint + "/" + this.poll.id.toString());
           })
-          .catch(err => this.$toast.error(err))
-          .then(res => res.json())
-          .then(data_json => {
-            let answers = data_json.map(d => parseInt(d))
-            this.setChart(answers, answers)
-            this.renderChart = true
-            this.$toast.success("App loaded without error.")
-          })
+          .catch((err) => this.$toast.error(err))
+          .then((res) => res.json())
+          .then((data_json) => {
+            let answers = data_json.get_poll.poll_answers
+            let scores = data_json.get_results.map((d) => parseInt(d));
+            let msg = data_json.get_poll_msg
+            this.setChart(answers, scores);
+            this.renderChart = true;
+            this.$toast.success(msg);
+          });
       });
   },
   methods: {
-    setChart(questions, answers) {
+    setChart(answers, scores) {
       this.chartOptions = {
         yAxis: {
           type: "category",
-          data: questions,
+          data: answers,
         },
         xAxis: {
           type: "value",
         },
         series: [
           {
-            data: answers,
+            data: scores,
             type: "bar",
             showBackground: false,
             backgroundStyle: {
@@ -142,21 +146,26 @@ export default {
             },
           },
         ],
-      }
+      };
     },
     makeReq(route, payload) {
       return fetch(
         Requests.endpoint + Requests.tryRoute(route),
         Requests.preReq(payload)
       )
-        .then((res) => this.$toast.success(JSON.parse(res)))
+        .then((res) => res.json())
         .catch((err) => this.$toast.error(err));
     },
     ask_token() {
       const payload = {
         ask_email: this.user.email,
       };
-      return this.makeReq("/ask", payload);
+      return this.makeReq("/ask", payload).then((res) =>
+        this.$toast.success(res.ask_token, {
+          duration: 60000,
+          dismissible: false,
+        })
+      );
     },
     confirm_token() {
       const payload = {
@@ -164,7 +173,15 @@ export default {
         req_confirm_fingerprint: this.user.fingerprint,
         req_confirm_email: this.user.email,
       };
-      return this.makeReq("/confirm_token", payload);
+      return this.makeReq("/confirm_token", payload).then((res) => {
+        if (res.resp_confirm_token && res.resp_confirm_hash) {
+          this.usertoken = res.resp_confirm_token;
+          this.user.hash = res.resp_confirm_hash;
+          this.$toast.success(res.resp_confirm_msg);
+        } else {
+          this.$toast.warning(res.resp_confirm_msg);
+        }
+      });
     },
     create_poll() {
       const payload = {
@@ -174,7 +191,9 @@ export default {
         req_create_startDate: this.poll.startDate,
         req_create_endDate: this.poll.endDate,
       };
-      return this.makeReq("/create", payload);
+      return this.makeReq("/create", payload).then((res) =>
+        this.$toast.success(res.create_msg)
+      );
     },
     close_poll() {
       const payload = {
@@ -182,7 +201,9 @@ export default {
         close_token: this.user.token,
         close_pollid: this.poll.id,
       };
-      return this.makeReq("/close", payload);
+      return this.makeReq("/close", payload).then((res) =>
+        this.$toast.success(res.close_msg)
+      );
     },
     take_poll() {
       const payload = {
@@ -192,7 +213,9 @@ export default {
         take_pollid: this.poll.id,
         take_answers: this.poll.answers,
       };
-      return this.makeReq("/take", payload);
+      return this.makeReq("/take", payload).then((res) =>
+        this.$toast.success(res.take_msg)
+      );
     },
   },
 };
