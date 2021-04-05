@@ -118,7 +118,7 @@ export default {
             let answers = data_json.map(d => parseInt(d))
             this.setChart(answers, answers)
             this.renderChart = true
-            this.$toast.success("App finished loading.")
+            this.$toast.success("App loaded without error.")
           })
       });
   },
