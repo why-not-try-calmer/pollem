@@ -1,0 +1,123 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 2904dd0b4a2768f9e8151ca51e6a69fbc8a32816ccb5df5f653a94db96dc4d48
+
+name:           pollem
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/githubuser/server#readme>
+homepage:       https://github.com/githubuser/server#readme
+bug-reports:    https://github.com/githubuser/server/issues
+author:         Author name here
+maintainer:     example@example.com
+copyright:      2021 Author name here
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/githubuser/server
+
+library
+  exposed-modules:
+      Computations
+      Database
+      ErrorsReplies
+      HandlersDataTypes
+      Mailer
+      Scheduler
+      Server
+      Workers
+  other-modules:
+      Paths_pollem
+  hs-source-dirs:
+      src
+  build-depends:
+      aeson
+    , aeson-extra
+    , async
+    , base >=4.7 && <5
+    , base64-bytestring
+    , bytestring
+    , containers
+    , cryptonite
+    , hedis
+    , memory
+    , mtl
+    , req
+    , servant-server
+    , text
+    , time
+    , unordered-containers
+    , wai
+    , wai-cors
+    , warp
+  default-language: Haskell2010
+
+executable server-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_pollem
+  hs-source-dirs:
+      app
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , aeson-extra
+    , async
+    , base
+    , base64-bytestring
+    , bytestring
+    , containers
+    , cryptonite
+    , hedis
+    , memory
+    , mtl
+    , pollem
+    , req
+    , servant-server
+    , text
+    , time
+    , unordered-containers
+    , wai
+    , wai-cors
+    , warp
+  default-language: Haskell2010
+
+test-suite server-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_pollem
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , aeson-extra
+    , async
+    , base
+    , base64-bytestring
+    , bytestring
+    , containers
+    , cryptonite
+    , hedis
+    , hspec
+    , hspec-wai
+    , hspec-wai-json
+    , memory
+    , mtl
+    , pollem
+    , req
+    , servant-server
+    , text
+    , time
+    , unordered-containers
+    , wai
+    , wai-cors
+    , warp
+  default-language: Haskell2010
