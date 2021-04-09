@@ -607,9 +607,9 @@ export default {
         confirmToken() {
             this.user.token_sent = true;
             const payload = {
-                req_confirm_token: this.user.token,
-                req_confirm_fingerprint: this.user.fingerprint,
-                req_confirm_email: this.user.email,
+                confirm_token: this.user.token,
+                confirm_fingerprint: this.user.fingerprint,
+                confirm_email: this.user.email,
             };
             return this.makeReq("/confirm_token", payload).then((res) => {
                 if (res.resp_confirm_token && res.resp_confirm_hash) {
