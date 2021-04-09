@@ -167,7 +167,7 @@ corsPolicy = cors (const $ Just policy)
           }
 
 app :: Config -> Application
-app env = corsPolicy . serve api . hoistServer api (injectEnv env) $ server
+app env = serve api . hoistServer api (injectEnv env) $ server
 
 startApp :: IO ()
 startApp = do
@@ -183,5 +183,7 @@ startApp = do
     {- running -}
     print "Worker started..."
     runSweeperWorker cache connector
-    print $ "Server started on port " ++ show port
-    run port (app config)
+    print $ "Server starting on port " ++ show port
+    if port == 8009
+        then run port $ corsPolicy (app config)
+        else run port (app config)
