@@ -178,7 +178,7 @@
                             </div>
                         </div>
                         <button
-                            v-if="AppMode === 'production'"
+                            v-if="AppMode === 'prod'"
                             v-on:click="takePoll"
                             class="my-5 w-1/3 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                         >
