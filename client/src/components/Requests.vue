@@ -597,7 +597,6 @@ export default {
             const payload = {
                 ask_email: this.user.email,
             };
-            console.log("ask token")
             return this.makeReq("/ask_token", payload).then((res) => {
                 this.$toast.success(res.resp_ask_token, {
                     duration: 15000,
