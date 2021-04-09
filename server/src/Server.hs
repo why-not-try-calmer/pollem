@@ -162,7 +162,7 @@ corsPolicy = cors (const $ Just policy)
         policy = simpleCorsResourcePolicy
           {
               corsMethods = [ "GET", "POST", "PUT", "OPTIONS" ],
-              corsOrigins = Just (["http://localhost:8080", "https://pollem-now.herokuapp.com"], True),
+              corsOrigins = Just (["http://localhost:8080", "https://hardcore-hopper-66afd6.netlify.app"], True),
               corsRequestHeaders = [ "authorization", "content-type" ]
           }
 
