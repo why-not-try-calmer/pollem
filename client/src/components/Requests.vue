@@ -344,8 +344,8 @@ const Requests = {
             "/get",
             "/take",
         ];
-        if (routes.any((r) => r === route)) return route;
-        else throw new Error("Wrong route: " + route);
+        if (routes.some((r) => r === route)) return route;
+        else return null;
     },
 };
 
@@ -570,8 +570,12 @@ export default {
         },
         // ----------- REQUESTS --------------
         makeReq(route, payload) {
-            const e = Requests.endpoints["dev"]; // Requests.endpoints["prod"]
+            const e = Requests.endpoints[this.AppMode]; // Requests.endpoints["prod"]
             const r = Requests.tryRoute(route);
+            if (r === null) {
+                this.$toast.error("Bad endpoint! Request aborted.")
+                return;
+            } 
             const url = e + r;
             if (route === "/get")
                 return fetch(url)
@@ -593,6 +597,7 @@ export default {
             const payload = {
                 ask_email: this.user.email,
             };
+            console.log("ask token")
             return this.makeReq("/ask_token", payload).then((res) => {
                 this.$toast.success(res.resp_ask_token, {
                     duration: 15000,
