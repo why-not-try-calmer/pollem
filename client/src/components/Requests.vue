@@ -583,7 +583,7 @@ export default {
                     .then((res) => res.json());
             else {
                 const config = {
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
                     method: "POST",
                     body: JSON.stringify(payload),
                 };
