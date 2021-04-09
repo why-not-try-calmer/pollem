@@ -87,18 +87,17 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 startDate_b = encodeUtf8  startDate
                 endDate_b = encodeUtf8 <$> endDate
             env <- ask
-            liftIO $ do
-                (v, g) <- takeMVar $ pollmanager env
-                let pollid = encodeStrict (v+1)
-                now <- getNow
-                res <- connDo (redisconn env) . submit $
-                    SCreate hash_b token_b pollid recipe_b startDate_b endDate_b
-                putMVar (pollmanager env) (v+1, g)
-                case res of
-                    Left err -> pure . RespCreate . R.renderError $ err
-                    Right ok -> pure $ RespCreate $
-                        "Thanks for creating this poll! You can follow the results as they come using this id"
-                            `T.append` (T.pack . show $ v+1)
+            either_nb <- liftIO $ connDo (redisconn env) getPollsNb
+            case either_nb of
+                Left err -> pure $ RespCreate (R.renderError err) Nothing
+                Right nb ->
+                    let pollid = encodeStrict (nb+1)
+                    in  liftIO $ do
+                        modifyMVar_ (pollmanager env) $ \p -> pure (nb, snd p)
+                        res <- connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b endDate_b
+                        case res of
+                            Left err -> pure $ RespCreate (R.renderError err) Nothing
+                            Right msg -> pure $ RespCreate (R.renderOk msg) (Just nb)
 
         close :: ReqClose -> AppM RespClose
         close (ReqClose hash token pollid) = do

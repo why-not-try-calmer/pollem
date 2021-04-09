@@ -89,7 +89,10 @@ data RespConfirmToken = RespConfirmToken {
 }
 $(deriveJSON defaultOptions ''RespConfirmToken)
 
-newtype RespCreate = RespCreate { resp_create_msg :: T.Text}
+data RespCreate = RespCreate { 
+    resp_create_msg :: T.Text,
+    resp_create_pollid :: Maybe Int
+}
 $(deriveJSON defaultOptions ''RespCreate)
 
 newtype RespClose = RespClose { resp_close_msg :: T.Text}
@@ -122,7 +125,7 @@ mockPoll = Poll {
     poll_creator_token = "lksdlksodi"
 }
 
-type PollCreator = MVar (Integer, SystemDRG)
+type PollCreator = MVar (Int, SystemDRG)
 
 type PollCache = MVar (HMS.HashMap B.ByteString (Poll, [Int], UTCTime))
 

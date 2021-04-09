@@ -79,6 +79,11 @@ borked = pure . Left . R.Err BorkedData $ mempty
 noUser = pure . Left . R.Err UserNotExist $ mempty
 notIn keyvals tested = not $ all (`elem` tested) keyvals
 
+getPollsNb :: Redis (Either (Err T.Text) Int)
+getPollsNb = smembers "polls" >>= \case
+    Left _ -> dbErr
+    Right res -> pure . Right . length $ res
+
 submit :: DbReq -> Redis (Either (Err T.Text) (Ok T.Text))
 submit (SAsk hash token) = -- hash + token generated a first time from the handler
     let key = "user:" `B.append` hash
