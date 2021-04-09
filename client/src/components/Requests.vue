@@ -430,15 +430,22 @@ export default {
                         .then((res) => {
                             if (!res.resp_get_poll) {
                                 this.$toast.error(
-                                    "Poll received but parsing failed. Unable to carry on."
+                                    "Either the poll was not received or could not be decoded, aborting. Unable to carry on."
                                 );
                                 return;
                             }
-                            this.takingPoll = JSON.parse(res.resp_get_poll);
-                            if (res.resp_get_poll_results)
+                            const poll = JSON.parse(res.resp_get_poll);
+                            this.takingPoll = poll;
+                            this.takingPoll.results = poll.answers.map((a) => ({
+                                text: a,
+                                value: false,
+                            }));
+                            if (res.resp_get_poll_results) {
                                 this.chart.results = res.resp_get_poll_results.map(
                                     (d) => parseInt(d)
                                 );
+                                this.setChartOptions();
+                            }
                             this.$toast.success(
                                 Replies.loaded +
                                     " Here is your poll. (" +
@@ -561,6 +568,7 @@ export default {
         removeAnswer() {
             this.creatingPoll.answers.pop();
         },
+        // ----------- REQUESTS --------------
         makeReq(route, payload) {
             const e = Requests.endpoints["dev"]; // Requests.endpoints["prod"]
             const r = Requests.tryRoute(route);
@@ -611,10 +619,10 @@ export default {
         },
         createPoll() {
             const payload = {
-                req_create_hash: this.user.hash,
-                req_create_token: this.user.token,
-                req_create_recipe: JSON.stringify(this.creatingPoll),
-                req_create_startDate: this.creatingPoll.startDate,
+                create_hash: this.user.hash,
+                create_token: this.user.token,
+                create_recipe: JSON.stringify(this.creatingPoll),
+                create_startDate: this.creatingPoll.startDate,
             };
             if (this.creatingPoll.endDate !== null)
                 payload.req_create_endDate = this.creatingPoll.endDate;
@@ -634,11 +642,14 @@ export default {
         },
         takePoll() {
             const payload = {
+                take_fingerprint: this.user.fingerprint,
                 take_hash: this.user.hash,
                 take_token: this.user.token,
-                take_fingerprint: this.user.fingerprint,
+                take_results: this.takingPoll.answers.map(
+                    (r) =>
+                        this.takingPoll.results.find((x) => x.text === r).value
+                ),
                 take_pollid: PollId,
-                take_answers: this.takingPoll.answers,
             };
             return this.makeReq("/take", payload).then((res) =>
                 this.$toast.success(res.resp_take_msg)
