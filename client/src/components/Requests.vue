@@ -359,7 +359,7 @@ export default {
     },
     data() {
         return {
-            AppMode: "dev", // "prod"
+            AppMode: "prod",//"dev", // "prod"
             creatingPoll: {
                 startDate: null,
                 endDate: null,
