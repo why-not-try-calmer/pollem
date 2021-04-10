@@ -265,10 +265,12 @@ getTakenCreated hash = smembers "polls" >>= \case
         collectCreated i = hget ("poll:" `B.append` i) "author_created"
         filterOnAuthor ids ls = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ ls
 
-getMyPollsData :: B.ByteString -> Redis [[(B.ByteString, B.ByteString)]]
+getMyPollsData :: B.ByteString -> Redis [(B.ByteString, [(B.ByteString, B.ByteString)])]
 getMyPollsData hash = getTakenCreated hash >>= \case
-    Right (taken, created) -> multiExec (sequence <$> traverse collectPoll (taken ++ created)) >>= \case
-        TxSuccess res -> pure res
+            Right (taken, created) -> 
+                let both = taken ++ created
+                in  multiExec (sequence <$> traverse collectPoll both) >>= \case
+                    TxSuccess res -> pure . zip both $ res
     where
         collectPoll i = hgetall ("poll:" `B.append` i)
 
