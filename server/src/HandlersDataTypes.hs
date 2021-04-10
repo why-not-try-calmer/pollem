@@ -19,6 +19,7 @@ import qualified Data.HashMap.Strict        as HMS
 import qualified Data.Text                  as T
 import           Data.Text.Encoding         (encodeUtf8)
 import           Data.Time                  (UTCTime (UTCTime))
+import Data.Aeson.Extra (encodeStrict)
 --
 
 {- Requests -}
@@ -31,9 +32,7 @@ data Poll = Poll {
     poll_description         :: T.Text,
     poll_multiple            :: Bool,
     poll_visible             :: Bool,
-    poll_answers             :: [T.Text],
-    poll_creator_fingerprint :: T.Text,
-    poll_creator_token       :: T.Text
+    poll_answers             :: [T.Text]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Poll)
 
@@ -122,9 +121,7 @@ mockPoll = Poll {
     poll_endDate = Just "2021-03-16T14:15:14+01:00",
     poll_multiple = True,
     poll_visible = True,
-    poll_answers = ["First", "Second", "Third"],
-    poll_creator_fingerprint = "0x01",
-    poll_creator_token = "lksdlksodi"
+    poll_answers = ["First", "Second", "Third"]
 }
 
 type PollCreator = MVar (Int, SystemDRG)

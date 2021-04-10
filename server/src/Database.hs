@@ -7,7 +7,8 @@ module Database where
 import           Computations
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
-import           Data.Aeson.Extra       (decodeStrict', encodeStrict)
+import           Data.Aeson             (decodeStrict)
+import           Data.Aeson.Extra       (encodeStrict)
 import qualified Data.ByteString        as B
 import           Data.ByteString.Char8  (readInt, unsnoc)
 import qualified Data.HashMap.Strict    as HMS
@@ -111,13 +112,14 @@ submit (SConfirm token fingerprint hash) = -- hash generated from the handler, t
                     Just saved_token ->
                         if token == saved_token then do
                             hmset key [("fingerprint", fingerprint),("verified","true")]
+                            sadd "users" [hash]
                             pure . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
                         else noUser
 submit (SCreate hash token pollid recipe startDate endDate) =
     let pollid_txt = decodeUtf8 pollid
         key = "user:" `B.append` hash
         payload =
-            let base = [("author_token", hash),("recipe",recipe),("startDate",startDate),("active","true")]
+            let base = [("author_hash", hash),("recipe",recipe),("startDate",startDate),("active","true")]
             in  case endDate of
                     Just e  -> ("endDate", e):base
                     Nothing -> base
@@ -186,12 +188,12 @@ getPoll (SGet pollid) =
                     if null participants then hgetall ("poll:" `B.append` pollid) >>= \case
                         Right poll_raw ->
                             let poll_metadata = M.fromList poll_raw
-                            in  do
-                                liftIO . print $ poll_metadata
-                                case M.lookup "recipe" poll_metadata of
+                            in  case M.lookup "recipe" poll_metadata of
                                     Nothing -> borked
-                                    Just recipe -> case decodeStrict' recipe :: Maybe Poll of
-                                        Nothing -> borked
+                                    Just recipe -> case decodeStrict recipe :: Maybe Poll of
+                                        Nothing -> do
+                                            liftIO . print $ recipe
+                                            borked
                                         Just poll -> pure . Right $ (poll, Nothing)
                     else let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
                     in  multiExec ( do
@@ -211,7 +213,7 @@ getPoll (SGet pollid) =
                                     let poll_metadata = M.fromList poll_raw
                                     in  case M.lookup "recipe" poll_metadata of
                                         Nothing -> borked
-                                        Just recipe -> case decodeStrict' recipe :: Maybe Poll of
+                                        Just recipe -> case decodeStrict recipe :: Maybe Poll of
                                             Nothing -> borked
                                             Just poll -> pure . Right $ (poll, Just $ reverse collected)
                             Nothing -> borked
@@ -243,20 +245,22 @@ disablePolls ls = multiExec (sequence_ <$> traverse disablePoll ls) >>= \case
     where
         disablePoll l = hset ("poll:" `B.append` l) "active" "false"
 
-getUserHistory :: B.ByteString  -> Redis (Either (Err T.Text) [B.ByteString])
+getUserHistory :: B.ByteString  -> Redis (Either (Err T.Text) ([B.ByteString],[B.ByteString]))
 getUserHistory hash = smembers "polls" >>= \case
     Left _ -> dbErr
-    Right ids -> traverse collectParticipants ids >>=
-        (\case
-            Left _ -> dbErr
-            Right found ->
-                let zipped = HMS.fromList . zip ids $ found
-                in  pure . Right . HMS.keys . HMS.filter (elem hash) $ zipped) . sequence
+    Right ids -> do
+        taken <- traverse collectParticipated ids >>= (\case
+            Right taken -> pure taken) . sequence
+        created <- traverse collectCreated ids >>= (\case
+            Right mb_strings -> pure . catMaybes $ mb_strings) . sequence
+        let mytaken = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ taken
+            mycreated = HMS.keys . HMS.filter (== hash) . HMS.fromList . zip ids $ created
+        pure . Right $ (mycreated, mytaken)
     where
-        collectParticipants i =
+        collectParticipated i =
             let key = "participants_hashes:" `B.append` i
             in  smembers key
---
+        collectCreated i = hget ("poll:" `B.append` i) "author_token"  -- FIX ME TO AUTHOR_HASH
 
 {- Tests -}
 
@@ -301,3 +305,7 @@ mockSetStageGetPoll conn =
     in  getNow >>= \now -> connDo conn $ actions (encodeStrict . show $ now) >>= \case
             Left err  -> liftIO . print . renderError $ err
             Right res -> liftIO . print . show $ res
+
+main = initRedisConnection >>= \conn -> connDo conn $ getUserHistory "7475fa0b9d3dc2112b49e631acead1a3d52ad879f023debfe08aa460818a3fc2" >>= \case
+    Right r -> liftIO $ print r
+    Left _  -> liftIO $ print "failed"

@@ -327,8 +327,6 @@ import Tabs from "./Tabs";
 import Tab from "./Tab";
 import { ref } from "vue";
 
-const BaseUrl = "https://hardcore-hopper-66afd6.netlify.app";
-
 let PollId = null;
 
 const Replies = {
@@ -659,20 +657,30 @@ export default {
             });
         },
         createPoll() {
-            const payload = {
+            let recipe = {
+                poll_startDate: this.creatingPoll.startDate,
+                poll_question: this.creatingPoll.question,
+                poll_description: this.creatingPoll.description,
+                poll_multiple: this.creatingPoll.multiple,
+                poll_visible: this.creatingPoll.visible,
+                poll_answers: this.creatingPoll.answers
+            }
+            let payload = {
                 create_hash: this.user.hash,
                 create_token: this.user.token,
-                create_recipe: JSON.stringify(this.creatingPoll),
-                create_startDate: this.creatingPoll.startDate,
-            };
-            if (this.creatingPoll.endDate !== null)
-                payload.req_create_endDate = this.creatingPoll.endDate;
+                create_startDate: this.creatingPoll.startDate
+            }
+            if (this.creatingPoll.endDate !== null) {
+                recipe.poll_endDate = this.creatingPoll.endDate
+                payload.create_endDate = this.creatingPoll.endDate;
+            }
+            payload.create_recipe = JSON.stringify(recipe)
             return this.makeReq("/create", payload).then((res) => {
                 this.$toast.success(res.resp_create_msg);
                 let createdPoll = {
                     question: this.creatingPoll.question,
                     startDate: this.creatingPoll.startDate,
-                    link: BaseUrl + "/" + res.resp_create_pollid.toString(),
+                    link: Requests[this.AppMode] + "/" + res.resp_create_pollid.toString(),
                 };
                 if (this.creatingPoll.endDate)
                     createdPoll.endDate = this.creatingPoll.endDate;
