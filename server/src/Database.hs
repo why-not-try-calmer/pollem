@@ -254,15 +254,16 @@ getUserHistory hash = smembers "polls" >>= \case
         created <- sequence <$> traverse collectCreated ids
         return $ (,) <$> taken <*> created ) >>= \case
         TxSuccess (taken, mb_created) ->
-            let mytaken = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ taken
-                mycreated = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ mb_created
+            let mytaken = filterOnAuthor ids taken
+                mycreated = filterOnAuthor ids mb_created
             in  pure . Right $ (mytaken, mycreated)
         _ -> dbErr
     where
         collectParticipated i =
             let key = "participants_hashes:" `B.append` i
             in  smembers key
-        collectCreated i = hget ("poll:" `B.append` i) "author_hash"  -- FIX ME TO AUTHOR_HASH
+        collectCreated i = hget ("poll:" `B.append` i) "author_created"
+        filterOnAuthor ids ls = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ ls
 
 {- Tests -}
 
