@@ -15,7 +15,6 @@ import           Data.Aeson
 import qualified Data.Aeson                 as J
 import           Data.Aeson.TH
 import qualified Data.ByteString            as B
-import qualified Data.ByteString.Base64     as B64
 import qualified Data.HashMap.Strict        as HMS
 import qualified Data.Text                  as T
 import           Data.Text.Encoding         (encodeUtf8)
@@ -71,7 +70,7 @@ data ReqTake = ReqTake {
     take_token       :: T.Text,
     take_fingerprint :: T.Text,
     take_pollid      :: T.Text,
-    take_results     :: [T.Text]
+    take_results     :: [Int]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqTake)
 --
