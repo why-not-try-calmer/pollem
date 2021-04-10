@@ -77,11 +77,11 @@ _connDo conn = void . connDo conn
 dbErr = pure . Left . R.Err Database $ mempty
 borked = pure . Left . R.Err BorkedData $ mempty
 noUser = pure . Left . R.Err UserNotExist $ mempty
-notIn keyvals tested = not $ all (`elem` tested) keyvals
+missingFrom keyvals tested = not $ all (`elem` tested) keyvals
 
 getPollsNb :: Redis (Either (Err T.Text) Int)
 getPollsNb = smembers "polls" >>= \case
-    Left _ -> dbErr
+    Left _    -> dbErr
     Right res -> pure . Right . length $ res
 
 submit :: DbReq -> Redis (Either (Err T.Text) (Ok T.Text))
@@ -128,7 +128,7 @@ submit (SCreate hash token pollid recipe startDate endDate) =
             else hgetall key >>= \case
                 Left _ -> noUser
                 Right userdata ->
-                    if notIn [("token",token), ("verified", "true")] userdata then pure . Left . R.Err UserNotVerified $ mempty
+                    if missingFrom [("token",token), ("verified", "true")] userdata then pure . Left . R.Err UserNotVerified $ mempty
                     else multiExec ( do
                         hmset ("poll:" `B.append` pollid) payload
                         sadd "polls" [pollid]
@@ -144,9 +144,9 @@ submit (SClose hash token pollid) =
             pure $ (,) <$> polldata <*> userdata
         ) >>= \case
             TxSuccess (pdata, udata) ->
-                if notIn [("active","true"), ("author_token", token)] pdata then pure . Left . R.Err Custom
+                if missingFrom [("active","true"), ("<", token)] pdata then pure . Left . R.Err Custom
                     $ "Either the poll was closed already, or you don't have closing rights." else
-                if notIn [("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ mempty
+                if missingFrom [("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ mempty
                 else do
                 hset pollid "active" "false"
                 pure . Right . R.Ok $ "This poll was closed: " `T.append` pollid_txt
@@ -162,8 +162,8 @@ submit (SAnswer hash token finger pollid answers) =
             ismemberF <- sismember hash ("participants_fingerprints:" `B.append` finger)
             pure $ (,,,) <$> polldata <*> userdata <*> ismemberH <*> ismemberF
         ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
-                        if notIn [("active","true")] pdata  then pure . Left . R.Err PollInactive $ pollid_txt else
-                        if notIn [("token", token),("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ decodeUtf8 hash else
+                        if missingFrom [("active","true")] pdata  then pure . Left . R.Err PollInactive $ pollid_txt else
+                        if missingFrom [("token", token),("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ decodeUtf8 hash else
                         if isF || isH then pure . Left . R.Err PollTakenAlready $ pollid_txt
                         else multiExec ( do
                             sadd ("participants_hashes:" `B.append` pollid) [hash]
@@ -171,22 +171,33 @@ submit (SAnswer hash token finger pollid answers) =
                             lpush ("answers:" `B.append` pollid `B.append` ":" `B.append` hash) answers
                         ) >>= \case TxSuccess _ -> pure . Right . R.Ok $ "Answers submitted successfully!"
                                     _  -> pure . Left . R.Err Database $ "Database error"
-                    _   -> pure . Left . R.Err Database $ "User or poll data missing."
+                    _   -> pure . Left . R.Err Database $ "User or poll data missingFrom."
 
-getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, [Int]))
+getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Maybe [Int]))
 getPoll (SGet pollid) =
     let pollid_txt = decodeUtf8 pollid
-    in  exists ("poll:" `B.append` pollid) >>= \case
+        key = ("poll:" `B.append` pollid)
+    in  exists key >>= \case
         Left err -> dbErr
         Right verdict ->
             if not verdict then pure . Left . R.Err PollNotExist $ pollid_txt
             else smembers ("participants_hashes:" `B.append` pollid) >>= \case
                 Right participants ->
-                    let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
+                    if null participants then hgetall ("poll:" `B.append` pollid) >>= \case
+                        Right poll_raw ->
+                            let poll_metadata = M.fromList poll_raw
+                            in  do
+                                liftIO . print $ poll_metadata
+                                case M.lookup "recipe" poll_metadata of
+                                    Nothing -> borked
+                                    Just recipe -> case decodeStrict' recipe :: Maybe Poll of
+                                        Nothing -> borked
+                                        Just poll -> pure . Right $ (poll, Nothing)
+                    else let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
                     in  multiExec ( do
-                            answers <- collectAnswers
-                            poll_meta_data <- hgetall ("poll:" `B.append` pollid)
-                            pure $ (,) <$> answers <*> poll_meta_data
+                        answers <- collectAnswers
+                        poll_meta_data <- hgetall ("poll:" `B.append` pollid)
+                        pure $ (,) <$> answers <*> poll_meta_data
                         )
                     >>= \case
                     TxError _ -> dbErr
@@ -202,7 +213,7 @@ getPoll (SGet pollid) =
                                         Nothing -> borked
                                         Just recipe -> case decodeStrict' recipe :: Maybe Poll of
                                             Nothing -> borked
-                                            Just poll -> pure . Right $ (poll, reverse collected)
+                                            Just poll -> pure . Right $ (poll, Just $ reverse collected)
                             Nothing -> borked
     where   decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
             decodeByteList val acc = traverse (fmap fst . readInt) val : acc
@@ -275,7 +286,7 @@ tSubmitAnswers =
         answers = ["0","0","1","1","1"]
     in submit $ SAnswer hash token fingerprint pollid answers
 
-tGetPoll :: Redis (Either (Err T.Text) (Poll, [Int]))
+tGetPoll :: Redis (Either (Err T.Text) (Poll, Maybe [Int]))
 tGetPoll = let pollid = "1" in getPoll . SGet $ pollid
 
 mockSetStageGetPoll :: Connection -> IO ()

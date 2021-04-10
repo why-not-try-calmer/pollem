@@ -8,9 +8,9 @@ import qualified Data.Text as T
 data ErrT =
     BadEmail | EmailTaken | PollExists | PollNotExist | PollIncomplete |
     PollTakenAlready |EmptyString | TokenNotExist | Database |
-    UserNotExist | PollInactive | UserNotVerified | BorkedData | Custom | SendGridError | DatetimeFormat
+    UserNotExist | PollInactive | UserNotVerified | BorkedData | Custom | SendGridError | DatetimeFormat deriving (Eq, Show)
 
-data Err a = Err ErrT a
+data Err a = Err ErrT a deriving (Eq, Show)
 
 newtype Ok a = Ok a
 

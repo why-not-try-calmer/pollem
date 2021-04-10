@@ -405,25 +405,8 @@ export default {
                 hash: "",
                 email: "",
                 fingerprint: "",
-                created: [
-                    {
-                        startDate: new Date(),
-                        question: "Dummy question",
-                        link: "https://www.nicesitedude.com",
-                    },
-                    {
-                        startDate: new Date(),
-                        question: "Dummy question",
-                        link: "https://www.nicesitedude.com",
-                    },
-                ],
-                taken: [
-                    {
-                        startDate: new Date(),
-                        question: "Dummy question",
-                        link: "https://www.nicesitedude.com",
-                    },
-                ],
+                created: [],
+                taken: [],
                 token_asked: false,
                 token_sent: false,
             },
@@ -431,10 +414,12 @@ export default {
     },
     setup() {
         // ---------LOADING -------------
-        // preparing tabs in relation to a possible GET request
-        const uri = window.location.search.substring(1);
-        PollId = new URLSearchParams(uri).get("poll_id");
-        const active = PollId === null ? ref(0) : ref(1);
+        const possible_get = window.location.href.split("/");
+        let active;
+        if (possible_get.includes("get")) {
+            PollId = parseInt(possible_get.pop());
+            active = ref(1);
+        } else active = ref(0);
         return { active };
     },
     mounted() {
@@ -456,13 +441,16 @@ export default {
                 // exiting loading if we're are not GET-ing any poll
                 if (PollId === null) {
                     this.$toast.success(Replies.loaded);
+                    fetch(Requests.endpoints[this.AppMode] + "/warmup")
+                        .then((res) => res.json())
+                        .then((res) => this.$toast.info(res));
                     return;
                     // otherwise fetching poll passed as parameter
                 }
                 return (
                     fetch(
                         Requests.endpoints[this.AppMode] +
-                            "/" +
+                            "/get/" +
                             PollId.toString()
                     )
                         // error, bubbling up to user

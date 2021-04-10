@@ -106,6 +106,9 @@ data RespGet = RespGet {
     resp_get_poll_results :: Maybe [Int]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''RespGet)
+
+newtype RespWarmup = RespWarmup T.Text
+$(deriveJSON defaultOptions ''RespWarmup)
 --
 
 {- Stateful types -}
@@ -126,7 +129,7 @@ mockPoll = Poll {
 
 type PollCreator = MVar (Int, SystemDRG)
 
-type PollCache = MVar (HMS.HashMap B.ByteString (Poll, [Int], UTCTime))
+type PollCache = MVar (HMS.HashMap B.ByteString (Poll, Maybe [Int], UTCTime))
 
 initState :: IO PollCreator
 initState = do
