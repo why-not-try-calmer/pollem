@@ -30,7 +30,7 @@ import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
-import           Scheduler                   (getNow, schedule)
+import           Scheduler                   (getNow, isoOrCustom, schedule)
 import           Servant
 import           System.Environment          (getEnvironment)
 import           Workers
@@ -84,8 +84,10 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
             let hash_b = encodeUtf8 token
                 token_b = encodeUtf8 token
                 recipe_b = encodeUtf8 token
-                startDate_b = encodeUtf8  startDate
-                endDate_b = encodeUtf8 <$> endDate
+                startDate_b = encodeUtf8 startDate
+                mb_endDate_b = (\x -> case isoOrCustom . T.unpack $ x of
+                    Left _   -> Nothing
+                    Right _ -> Just . encodeUtf8 $ x) =<< endDate
             env <- ask
             either_nb <- liftIO $ connDo (redisconn env) getPollsNb
             case either_nb of
@@ -93,11 +95,14 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 Right nb ->
                     let pollid = encodeStrict (nb+1)
                     in  liftIO $ do
-                        modifyMVar_ (pollmanager env) $ \p -> pure (nb, snd p)
-                        res <- connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b endDate_b
-                        case res of
-                            Left err -> pure $ RespCreate (R.renderError err) Nothing
-                            Right msg -> pure $ RespCreate (R.renderOk msg) (Just nb)
+                        case isoOrCustom . T.unpack $ startDate of
+                            Left _ -> pure $ RespCreate (R.renderError (R.Err R.DatetimeFormat (mempty :: T.Text))) Nothing
+                            Right date -> do
+                                modifyMVar_ (pollmanager env) $ \p -> pure (nb, snd p)
+                                res <- connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b mb_endDate_b
+                                case res of
+                                    Left err -> pure $ RespCreate (R.renderError err) Nothing
+                                    Right msg -> pure $ RespCreate (R.renderOk msg) (Just nb)
 
         close :: ReqClose -> AppM RespClose
         close (ReqClose hash token pollid) = do

@@ -292,14 +292,22 @@
                 </tab>
                 <tab v-if="mypolls" title="My Polls">
                     <p class="font-bold">Created</p>
-                    <div v-for="(t, k) in user.created" :key="k" class="grid grid-cols-3 gap-1">
+                    <div
+                        v-for="(t, k) in user.created"
+                        :key="k"
+                        class="grid grid-cols-3 gap-1"
+                    >
                         <input :value="t.question" disabled />
                         <input :value="t.startDate" disabled />
                         <input v-if="t.endDate" :value="t.endDate" disabled />
                         <a :href="t.link">Go to poll</a>
                     </div>
                     <p class="font-bold">Taken</p>
-                    <div v-for="(t, k) in user.taken" :key="k" class="grid grid-cols-3 gap-1">
+                    <div
+                        v-for="(t, k) in user.taken"
+                        :key="k"
+                        class="grid grid-cols-3 gap-1"
+                    >
                         <input :value="t.question" disabled />
                         <input :value="t.startDate" disabled />
                         <input v-if="t.endDate" :value="t.endDate" disabled />
@@ -397,8 +405,25 @@ export default {
                 hash: "",
                 email: "",
                 fingerprint: "",
-                created: [{startDate: new Date(), question: "Dummy question", link: "https://www.nicesitedude.com"},{startDate: new Date(), question: "Dummy question", link: "https://www.nicesitedude.com"}],
-                taken: [{startDate: new Date(), question: "Dummy question", link: "https://www.nicesitedude.com"}],
+                created: [
+                    {
+                        startDate: new Date(),
+                        question: "Dummy question",
+                        link: "https://www.nicesitedude.com",
+                    },
+                    {
+                        startDate: new Date(),
+                        question: "Dummy question",
+                        link: "https://www.nicesitedude.com",
+                    },
+                ],
+                taken: [
+                    {
+                        startDate: new Date(),
+                        question: "Dummy question",
+                        link: "https://www.nicesitedude.com",
+                    },
+                ],
                 token_asked: false,
                 token_sent: false,
             },

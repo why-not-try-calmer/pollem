@@ -8,7 +8,7 @@ import qualified Data.Text as T
 data ErrT =
     BadEmail | EmailTaken | PollExists | PollNotExist | PollIncomplete |
     PollTakenAlready |EmptyString | TokenNotExist | Database |
-    UserNotExist | PollInactive | UserNotVerified | BorkedData | Custom | SendGridError
+    UserNotExist | PollInactive | UserNotVerified | BorkedData | Custom | SendGridError | DatetimeFormat
 
 data Err a = Err ErrT a
 
@@ -22,6 +22,7 @@ renderError (Err BadEmail v) = addToText v "This email is not formatted property
 renderError (Err BorkedData _) = "Cannot work on this probably corrupted data."
 renderError (Err Custom v) = addToText v mempty
 renderError (Err Database _) = "Database error: Couldn't satisfy server request."
+renderError (Err DatetimeFormat _) = "Unable to parse the date, aborting now."
 renderError (Err EmailTaken _) = "Bear in mind that this email address is registered already. I will send you a verification email nonetheless. You don't need to use it unless you have issues authenticating on this application."
 renderError (Err EmptyString _) = "The string you've submitted was empty."
 renderError (Err PollExists v) = addToText v "This poll exists already: "
