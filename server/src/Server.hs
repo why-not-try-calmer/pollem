@@ -30,7 +30,7 @@ import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
-import           Scheduler                   (getNow, schedule)
+import           Scheduler                   (getNow, isoOrCustom, schedule)
 import           Servant
 import           System.Environment          (getEnvironment)
 import           Workers
@@ -40,14 +40,15 @@ type API =
     "confirm_token" :> ReqBody '[JSON] ReqConfirmToken :> Post '[JSON] RespConfirmToken :<|>
     "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespCreate :<|>
     "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
-    "get" :> Capture "poll_id" Integer :> Get '[JSON] RespGet :<|>
-    "take" :> ReqBody '[JSON] ReqTake :> Post '[JSON] RespTake
+    "get" :> Capture "poll_id" Int :> Get '[JSON] RespGet :<|>
+    "take" :> ReqBody '[JSON] ReqTake :> Post '[JSON] RespTake :<|>
+    "warmup" :> Get '[JSON] RespWarmup
 
 api :: Proxy API
 api = Proxy
 
 server :: ServerT API AppM
-server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
+server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take :<|> warmup
     where
         ask_token :: ReqAskToken -> AppM RespAskToken
         ask_token (ReqAskToken email) = do
@@ -81,11 +82,13 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
 
         create :: ReqCreate -> AppM RespCreate
         create (ReqCreate hash token recipe startDate endDate) = do
-            let hash_b = encodeUtf8 token
+            let hash_b = encodeUtf8 hash
                 token_b = encodeUtf8 token
-                recipe_b = encodeUtf8 token
-                startDate_b = encodeUtf8  startDate
-                endDate_b = encodeUtf8 <$> endDate
+                recipe_b = encodeUtf8 recipe
+                startDate_b = encodeUtf8 startDate
+                mb_endDate_b = (\x -> case isoOrCustom . T.unpack $ x of
+                    Left _   -> Nothing
+                    Right _ -> Just . encodeUtf8 $ x) =<< endDate
             env <- ask
             either_nb <- liftIO $ connDo (redisconn env) getPollsNb
             case either_nb of
@@ -93,11 +96,14 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 Right nb ->
                     let pollid = encodeStrict (nb+1)
                     in  liftIO $ do
-                        modifyMVar_ (pollmanager env) $ \p -> pure (nb, snd p)
-                        res <- connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b endDate_b
-                        case res of
-                            Left err -> pure $ RespCreate (R.renderError err) Nothing
-                            Right msg -> pure $ RespCreate (R.renderOk msg) (Just nb)
+                        case isoOrCustom . T.unpack $ startDate of
+                            Left _ -> pure $ RespCreate (R.renderError (R.Err R.DatetimeFormat (mempty :: T.Text))) Nothing
+                            Right date -> do
+                                modifyMVar_ (pollmanager env) $ \p -> pure (nb, snd p)
+                                res <- connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b mb_endDate_b
+                                case res of
+                                    Left err -> pure $ RespCreate (R.renderError err) Nothing
+                                    Right msg -> pure $ RespCreate (R.renderOk msg) (Just nb)
 
         close :: ReqClose -> AppM RespClose
         close (ReqClose hash token pollid) = do
@@ -109,7 +115,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                 Left err -> pure . RespClose . R.renderError $ err
                 Right ok -> pure $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)
 
-        get :: Integer -> AppM RespGet
+        get :: Int -> AppM RespGet
         get pollid =
             let pollid_b = encodeStrict pollid
                 req = SGet pollid_b
@@ -119,13 +125,13 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
                     now <- getNow
                     hmap <- readMVar . pollcache $ env
                     res <- case HMS.lookup pollid_b hmap of
-                        Just (poll, scores, _) -> pure $ Right (poll, scores)
+                        Just (poll, mb_scores, _) -> pure $ Right (poll, mb_scores)
                         Nothing -> connDo (redisconn env) . getPoll $ SGet pollid_b
                     case res of
-                        Left _ -> pure $ RespGet "Unable to find a poll with this id." Nothing Nothing
-                        Right (poll, scores) -> do
-                            modifyMVar_ (pollcache env) (\_ -> pure $ HMS.insert pollid_b (poll, scores, now) hmap)
-                            if poll_visible poll then pure $ RespGet "Ok" (Just poll) (Just scores)
+                        Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
+                        Right (poll, mb_scores) -> do
+                            modifyMVar_ (pollcache env) (\_ -> pure $ HMS.insert pollid_b (poll, mb_scores, now) hmap)
+                            if poll_visible poll then pure $ RespGet "Ok" (Just poll) mb_scores
                             else pure $ RespGet "Ok" (Just poll) Nothing
 
         take :: ReqTake -> AppM RespTake
@@ -136,6 +142,9 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take
             case res of
                 Left err  -> pure . RespTake . R.renderError $ err
                 Right msg -> pure . RespTake . R.renderOk $ msg
+
+        warmup :: AppM RespWarmup
+        warmup = pure $ RespWarmup "Server warmed up for your coziness!"
 
 newtype AppM a = AppM { unAppM :: ReaderT Config (ExceptT ServerError IO) a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader Config)

@@ -22,7 +22,7 @@
                     <div class="m-4" v-if="loggedIn">
                         <p>Welcome, {{ user.email }}</p>
                         <button
-                            v-on:click="logout"
+                            @click="logout"
                             class="p-1 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                         >
                             Logout
@@ -45,7 +45,7 @@
                                 />
                                 <button
                                     v-if="!user.token_asked"
-                                    v-on:click="askToken"
+                                    @click="askToken"
                                     class="p-1 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                                 >
                                     Authenticate
@@ -69,7 +69,7 @@
                                         user.token.length > 3 &&
                                         !user.token_sent
                                     "
-                                    v-on:click="confirmToken"
+                                    @click="confirmToken"
                                     class="p-1 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                                 >
                                     Confirm token
@@ -88,7 +88,7 @@
                 <tab title="Take the poll">
                     <button
                         v-if="AppMode === 'dev' && !takingPoll.startDate"
-                        v-on:click="testChart"
+                        @click="testChart"
                     >
                         Test chart
                     </button>
@@ -99,7 +99,7 @@
                                     id="takingQuestion"
                                     rows="2"
                                     cols="30"
-                                    v-bind:value="takingPoll.question"
+                                    :value="takingPoll.question"
                                     disabled
                                 />
                             </div>
@@ -117,7 +117,7 @@
                                     id="takingDescription"
                                     rows="3"
                                     cols="45"
-                                    v-bind:value="takingPoll.description"
+                                    :value="takingPoll.description"
                                     disabled
                                 />
                             </div>
@@ -127,8 +127,8 @@
                                     <input
                                         class="ml-4"
                                         type="checkbox"
-                                        v-on:change="toggleResults(k)"
-                                        v-bind:checked="a.value"
+                                        @change="toggleResults(k)"
+                                        :checked="a.value"
                                     />
                                 </div>
                             </div>
@@ -161,7 +161,7 @@
                                 <input
                                     type="text"
                                     id="takingStartDate"
-                                    v-bind:value="takingPoll.startDate"
+                                    :value="takingPoll.startDate"
                                     disabled
                                 />
                                 <div v-if="takingPoll.endDate">
@@ -171,7 +171,7 @@
                                     <input
                                         type="text"
                                         id="takingEndDate"
-                                        v-bind:value="takingPoll.endDate"
+                                        :value="takingPoll.endDate"
                                         disabled
                                     />
                                 </div>
@@ -179,14 +179,14 @@
                         </div>
                         <button
                             v-if="AppMode === 'prod'"
-                            v-on:click="takePoll"
+                            @click="takePoll"
                             class="my-5 w-1/3 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                         >
                             Take the poll
                         </button>
                         <button
                             v-else
-                            v-on:click="testSubmitPoll"
+                            @click="testSubmitPoll"
                             class="my-5 w-1/3 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                         >
                             Take the poll
@@ -223,7 +223,7 @@
                                 >
                                 <input
                                     type="text"
-                                    v-on:input="
+                                    @input="
                                         creatingPoll.answers[k] =
                                             $event.target.value
                                     "
@@ -232,13 +232,13 @@
                         </div>
                         <div>
                             <button
-                                v-on:click="addAnswer"
+                                @click="addAnswer"
                                 class="p-1 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                             >
                                 more answers...
                             </button>
                             <button
-                                v-on:click="removeAnswer"
+                                @click="removeAnswer"
                                 v-if="creatingPoll.answers.length > 2"
                                 class="ml-2 p-1 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                             >
@@ -284,11 +284,35 @@
                         </div>
                     </div>
                     <button
-                        v-on:click="createPoll"
+                        @click="createPoll"
                         class="my-5 w-1/3 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                     >
                         Create the poll
                     </button>
+                </tab>
+                <tab v-if="mypolls" title="My Polls">
+                    <p class="font-bold">Created</p>
+                    <div
+                        v-for="(t, k) in user.created"
+                        :key="k"
+                        class="grid grid-cols-3 gap-1"
+                    >
+                        <input :value="t.question" disabled />
+                        <input :value="t.startDate" disabled />
+                        <input v-if="t.endDate" :value="t.endDate" disabled />
+                        <a :href="t.link">Go to poll</a>
+                    </div>
+                    <p class="font-bold">Taken</p>
+                    <div
+                        v-for="(t, k) in user.taken"
+                        :key="k"
+                        class="grid grid-cols-3 gap-1"
+                    >
+                        <input :value="t.question" disabled />
+                        <input :value="t.startDate" disabled />
+                        <input v-if="t.endDate" :value="t.endDate" disabled />
+                        <a :href="t.link">Go to poll</a>
+                    </div>
                 </tab>
             </tabs>
         </div>
@@ -388,10 +412,12 @@ export default {
     },
     setup() {
         // ---------LOADING -------------
-        // preparing tabs in relation to a possible GET request
-        const uri = window.location.search.substring(1);
-        PollId = new URLSearchParams(uri).get("poll_id");
-        const active = PollId === null ? ref(0) : ref(1);
+        const possible_get = window.location.href.split("/");
+        let active;
+        if (possible_get.includes("get")) {
+            PollId = parseInt(possible_get.pop());
+            active = ref(1);
+        } else active = ref(0);
         return { active };
     },
     mounted() {
@@ -413,13 +439,16 @@ export default {
                 // exiting loading if we're are not GET-ing any poll
                 if (PollId === null) {
                     this.$toast.success(Replies.loaded);
+                    fetch(Requests.endpoints[this.AppMode] + "/warmup")
+                        .then((res) => res.json())
+                        .then((res) => this.$toast.info(res));
                     return;
                     // otherwise fetching poll passed as parameter
                 }
                 return (
                     fetch(
                         Requests.endpoints[this.AppMode] +
-                            "/" +
+                            "/get/" +
                             PollId.toString()
                     )
                         // error, bubbling up to user
@@ -470,6 +499,9 @@ export default {
             return x === 0
                 ? null
                 : "width: 900px; height: " + (75 * x).toString() + "px";
+        },
+        mypolls() {
+            return this.user.created.length > 0 || this.user.taken.length > 0;
         },
     },
     methods: {
@@ -573,9 +605,9 @@ export default {
             const e = Requests.endpoints[this.AppMode]; // Requests.endpoints["prod"]
             const r = Requests.tryRoute(route);
             if (r === null) {
-                this.$toast.error("Bad endpoint! Request aborted.")
+                this.$toast.error("Bad endpoint! Request aborted.");
                 return;
-            } 
+            }
             const url = e + r;
             if (route === "/get")
                 return fetch(url)
@@ -583,7 +615,10 @@ export default {
                     .then((res) => res.json());
             else {
                 const config = {
-                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                    },
                     method: "POST",
                     body: JSON.stringify(payload),
                 };
@@ -622,17 +657,35 @@ export default {
             });
         },
         createPoll() {
-            const payload = {
+            let recipe = {
+                poll_startDate: this.creatingPoll.startDate,
+                poll_question: this.creatingPoll.question,
+                poll_description: this.creatingPoll.description,
+                poll_multiple: this.creatingPoll.multiple,
+                poll_visible: this.creatingPoll.visible,
+                poll_answers: this.creatingPoll.answers
+            }
+            let payload = {
                 create_hash: this.user.hash,
                 create_token: this.user.token,
-                create_recipe: JSON.stringify(this.creatingPoll),
-                create_startDate: this.creatingPoll.startDate,
-            };
-            if (this.creatingPoll.endDate !== null)
-                payload.req_create_endDate = this.creatingPoll.endDate;
-            return this.makeReq("/create", payload).then((res) =>
-                this.$toast.success(res.resp_create_msg)
-            );
+                create_startDate: this.creatingPoll.startDate
+            }
+            if (this.creatingPoll.endDate !== null) {
+                recipe.poll_endDate = this.creatingPoll.endDate
+                payload.create_endDate = this.creatingPoll.endDate;
+            }
+            payload.create_recipe = JSON.stringify(recipe)
+            return this.makeReq("/create", payload).then((res) => {
+                this.$toast.success(res.resp_create_msg);
+                let createdPoll = {
+                    question: this.creatingPoll.question,
+                    startDate: this.creatingPoll.startDate,
+                    link: Requests[this.AppMode] + "/" + res.resp_create_pollid.toString(),
+                };
+                if (this.creatingPoll.endDate)
+                    createdPoll.endDate = this.creatingPoll.endDate;
+                this.user.created.push(createdPoll);
+            });
         },
         closePoll() {
             const payload = {

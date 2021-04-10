@@ -15,11 +15,11 @@ import           Data.Aeson
 import qualified Data.Aeson                 as J
 import           Data.Aeson.TH
 import qualified Data.ByteString            as B
-import qualified Data.ByteString.Base64     as B64
 import qualified Data.HashMap.Strict        as HMS
 import qualified Data.Text                  as T
 import           Data.Text.Encoding         (encodeUtf8)
 import           Data.Time                  (UTCTime (UTCTime))
+import Data.Aeson.Extra (encodeStrict)
 --
 
 {- Requests -}
@@ -32,9 +32,7 @@ data Poll = Poll {
     poll_description         :: T.Text,
     poll_multiple            :: Bool,
     poll_visible             :: Bool,
-    poll_answers             :: [T.Text],
-    poll_creator_fingerprint :: T.Text,
-    poll_creator_token       :: T.Text
+    poll_answers             :: [T.Text]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Poll)
 
@@ -71,7 +69,7 @@ data ReqTake = ReqTake {
     take_token       :: T.Text,
     take_fingerprint :: T.Text,
     take_pollid      :: T.Text,
-    take_results     :: [T.Text]
+    take_results     :: [Int]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqTake)
 --
@@ -107,6 +105,9 @@ data RespGet = RespGet {
     resp_get_poll_results :: Maybe [Int]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''RespGet)
+
+newtype RespWarmup = RespWarmup T.Text
+$(deriveJSON defaultOptions ''RespWarmup)
 --
 
 {- Stateful types -}
@@ -120,14 +121,12 @@ mockPoll = Poll {
     poll_endDate = Just "2021-03-16T14:15:14+01:00",
     poll_multiple = True,
     poll_visible = True,
-    poll_answers = ["First", "Second", "Third"],
-    poll_creator_fingerprint = "0x01",
-    poll_creator_token = "lksdlksodi"
+    poll_answers = ["First", "Second", "Third"]
 }
 
 type PollCreator = MVar (Int, SystemDRG)
 
-type PollCache = MVar (HMS.HashMap B.ByteString (Poll, [Int], UTCTime))
+type PollCache = MVar (HMS.HashMap B.ByteString (Poll, Maybe [Int], UTCTime))
 
 initState :: IO PollCreator
 initState = do

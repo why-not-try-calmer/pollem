@@ -7,7 +7,8 @@ module Database where
 import           Computations
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
-import           Data.Aeson.Extra       (decodeStrict', encodeStrict)
+import           Data.Aeson             (decodeStrict)
+import           Data.Aeson.Extra       (encodeStrict)
 import qualified Data.ByteString        as B
 import           Data.ByteString.Char8  (readInt, unsnoc)
 import qualified Data.HashMap.Strict    as HMS
@@ -77,11 +78,11 @@ _connDo conn = void . connDo conn
 dbErr = pure . Left . R.Err Database $ mempty
 borked = pure . Left . R.Err BorkedData $ mempty
 noUser = pure . Left . R.Err UserNotExist $ mempty
-notIn keyvals tested = not $ all (`elem` tested) keyvals
+missingFrom keyvals tested = not $ all (`elem` tested) keyvals
 
 getPollsNb :: Redis (Either (Err T.Text) Int)
 getPollsNb = smembers "polls" >>= \case
-    Left _ -> dbErr
+    Left _    -> dbErr
     Right res -> pure . Right . length $ res
 
 submit :: DbReq -> Redis (Either (Err T.Text) (Ok T.Text))
@@ -111,13 +112,14 @@ submit (SConfirm token fingerprint hash) = -- hash generated from the handler, t
                     Just saved_token ->
                         if token == saved_token then do
                             hmset key [("fingerprint", fingerprint),("verified","true")]
+                            sadd "users" [hash]
                             pure . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
                         else noUser
 submit (SCreate hash token pollid recipe startDate endDate) =
     let pollid_txt = decodeUtf8 pollid
         key = "user:" `B.append` hash
         payload =
-            let base = [("author_token", hash),("recipe",recipe),("startDate",startDate),("active","true")]
+            let base = [("author_hash", hash),("recipe",recipe),("startDate",startDate),("active","true")]
             in  case endDate of
                     Just e  -> ("endDate", e):base
                     Nothing -> base
@@ -128,7 +130,7 @@ submit (SCreate hash token pollid recipe startDate endDate) =
             else hgetall key >>= \case
                 Left _ -> noUser
                 Right userdata ->
-                    if notIn [("token",token), ("verified", "true")] userdata then pure . Left . R.Err UserNotVerified $ mempty
+                    if missingFrom [("token",token), ("verified", "true")] userdata then pure . Left . R.Err UserNotVerified $ mempty
                     else multiExec ( do
                         hmset ("poll:" `B.append` pollid) payload
                         sadd "polls" [pollid]
@@ -144,9 +146,9 @@ submit (SClose hash token pollid) =
             pure $ (,) <$> polldata <*> userdata
         ) >>= \case
             TxSuccess (pdata, udata) ->
-                if notIn [("active","true"), ("author_token", token)] pdata then pure . Left . R.Err Custom
+                if missingFrom [("active","true"), ("<", token)] pdata then pure . Left . R.Err Custom
                     $ "Either the poll was closed already, or you don't have closing rights." else
-                if notIn [("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ mempty
+                if missingFrom [("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ mempty
                 else do
                 hset pollid "active" "false"
                 pure . Right . R.Ok $ "This poll was closed: " `T.append` pollid_txt
@@ -162,8 +164,8 @@ submit (SAnswer hash token finger pollid answers) =
             ismemberF <- sismember hash ("participants_fingerprints:" `B.append` finger)
             pure $ (,,,) <$> polldata <*> userdata <*> ismemberH <*> ismemberF
         ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
-                        if notIn [("active","true")] pdata  then pure . Left . R.Err PollInactive $ pollid_txt else
-                        if notIn [("token", token),("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ decodeUtf8 hash else
+                        if missingFrom [("active","true")] pdata  then pure . Left . R.Err PollInactive $ pollid_txt else
+                        if missingFrom [("token", token),("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ decodeUtf8 hash else
                         if isF || isH then pure . Left . R.Err PollTakenAlready $ pollid_txt
                         else multiExec ( do
                             sadd ("participants_hashes:" `B.append` pollid) [hash]
@@ -171,22 +173,33 @@ submit (SAnswer hash token finger pollid answers) =
                             lpush ("answers:" `B.append` pollid `B.append` ":" `B.append` hash) answers
                         ) >>= \case TxSuccess _ -> pure . Right . R.Ok $ "Answers submitted successfully!"
                                     _  -> pure . Left . R.Err Database $ "Database error"
-                    _   -> pure . Left . R.Err Database $ "User or poll data missing."
+                    _   -> pure . Left . R.Err Database $ "User or poll data missingFrom."
 
-getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, [Int]))
+getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Maybe [Int]))
 getPoll (SGet pollid) =
     let pollid_txt = decodeUtf8 pollid
-    in  exists ("poll:" `B.append` pollid) >>= \case
+        key = ("poll:" `B.append` pollid)
+    in  exists key >>= \case
         Left err -> dbErr
         Right verdict ->
             if not verdict then pure . Left . R.Err PollNotExist $ pollid_txt
             else smembers ("participants_hashes:" `B.append` pollid) >>= \case
                 Right participants ->
-                    let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
+                    if null participants then hgetall ("poll:" `B.append` pollid) >>= \case
+                        Right poll_raw ->
+                            let poll_metadata = M.fromList poll_raw
+                            in  case M.lookup "recipe" poll_metadata of
+                                    Nothing -> borked
+                                    Just recipe -> case decodeStrict recipe :: Maybe Poll of
+                                        Nothing -> do
+                                            liftIO . print $ recipe
+                                            borked
+                                        Just poll -> pure . Right $ (poll, Nothing)
+                    else let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
                     in  multiExec ( do
-                            answers <- collectAnswers
-                            poll_meta_data <- hgetall ("poll:" `B.append` pollid)
-                            pure $ (,) <$> answers <*> poll_meta_data
+                        answers <- collectAnswers
+                        poll_meta_data <- hgetall ("poll:" `B.append` pollid)
+                        pure $ (,) <$> answers <*> poll_meta_data
                         )
                     >>= \case
                     TxError _ -> dbErr
@@ -200,9 +213,9 @@ getPoll (SGet pollid) =
                                     let poll_metadata = M.fromList poll_raw
                                     in  case M.lookup "recipe" poll_metadata of
                                         Nothing -> borked
-                                        Just recipe -> case decodeStrict' recipe :: Maybe Poll of
+                                        Just recipe -> case decodeStrict recipe :: Maybe Poll of
                                             Nothing -> borked
-                                            Just poll -> pure . Right $ (poll, reverse collected)
+                                            Just poll -> pure . Right $ (poll, Just $ reverse collected)
                             Nothing -> borked
     where   decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
             decodeByteList val acc = traverse (fmap fst . readInt) val : acc
@@ -232,20 +245,25 @@ disablePolls ls = multiExec (sequence_ <$> traverse disablePoll ls) >>= \case
     where
         disablePoll l = hset ("poll:" `B.append` l) "active" "false"
 
-getUserHistory :: B.ByteString  -> Redis (Either (Err T.Text) [B.ByteString])
+getUserHistory :: B.ByteString -> Redis (Either (Err T.Text) ([B.ByteString], [B.ByteString]))
 getUserHistory hash = smembers "polls" >>= \case
     Left _ -> dbErr
-    Right ids -> traverse collectParticipants ids >>=
-        (\case
-            Left _ -> dbErr
-            Right found ->
-                let zipped = HMS.fromList . zip ids $ found
-                in  pure . Right . HMS.keys . HMS.filter (elem hash) $ zipped) . sequence
+    Right ids ->
+        multiExec ( do
+        taken <- sequence <$> traverse collectParticipated ids
+        created <- sequence <$> traverse collectCreated ids
+        return $ (,) <$> taken <*> created ) >>= \case
+        TxSuccess (taken, mb_created) ->
+            let mytaken = filterOnAuthor ids taken
+                mycreated = filterOnAuthor ids mb_created
+            in  pure . Right $ (mytaken, mycreated)
+        _ -> dbErr
     where
-        collectParticipants i =
+        collectParticipated i =
             let key = "participants_hashes:" `B.append` i
             in  smembers key
---
+        collectCreated i = hget ("poll:" `B.append` i) "author_created"
+        filterOnAuthor ids ls = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ ls
 
 {- Tests -}
 
@@ -275,7 +293,7 @@ tSubmitAnswers =
         answers = ["0","0","1","1","1"]
     in submit $ SAnswer hash token fingerprint pollid answers
 
-tGetPoll :: Redis (Either (Err T.Text) (Poll, [Int]))
+tGetPoll :: Redis (Either (Err T.Text) (Poll, Maybe [Int]))
 tGetPoll = let pollid = "1" in getPoll . SGet $ pollid
 
 mockSetStageGetPoll :: Connection -> IO ()
@@ -290,3 +308,7 @@ mockSetStageGetPoll conn =
     in  getNow >>= \now -> connDo conn $ actions (encodeStrict . show $ now) >>= \case
             Left err  -> liftIO . print . renderError $ err
             Right res -> liftIO . print . show $ res
+
+main = initRedisConnection >>= \conn -> connDo conn $ getUserHistory "7475fa0b9d3dc2112b49e631acead1a3d52ad879f023debfe08aa460818a3fc2" >>= \case
+    Right r -> liftIO $ print r
+    Left _  -> liftIO $ print "failed"

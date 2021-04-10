@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 586de7d828202cfa050cb8b6f641ed1097b85843629c4d5c4a3673a660325ede
+-- hash: 4b6e674d2de48ac8cfa92c7777e917a36baa203ce3b9d5e4068496f4076b4f19
 
 name:           pollem
 version:        0.1.0.0
@@ -41,7 +41,6 @@ library
     , aeson-extra
     , async
     , base >=4.7 && <5
-    , base64-bytestring
     , bytestring
     , containers
     , cryptonite
@@ -70,7 +69,6 @@ executable server-exe
     , aeson-extra
     , async
     , base
-    , base64-bytestring
     , bytestring
     , containers
     , cryptonite
@@ -101,7 +99,6 @@ test-suite server-test
     , aeson-extra
     , async
     , base
-    , base64-bytestring
     , bytestring
     , containers
     , cryptonite

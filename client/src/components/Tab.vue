@@ -6,14 +6,13 @@ export default {
     props: {
         title: String,
     },
-    setup(props) {
+    setup() { // props
         const instance = getCurrentInstance();
         const { tabs, active } = inject("tabsState");
         const index = computed(() =>
             tabs.value.findIndex((target) => target.uid === instance.uid)
         );
         const isActive = computed(() => index.value === active.value);
-        console.log(props);
         watchEffect(() => {
             if (index.value === -1) {
                 tabs.value.push(instance);
