@@ -245,8 +245,8 @@ disablePolls ls = multiExec (sequence_ <$> traverse disablePoll ls) >>= \case
     where
         disablePoll l = hset ("poll:" `B.append` l) "active" "false"
 
-getUserHistory :: B.ByteString -> Redis (Either (Err T.Text) ([B.ByteString], [B.ByteString]))
-getUserHistory hash = smembers "polls" >>= \case
+getTakenCreated :: B.ByteString -> Redis (Either (Err T.Text) ([B.ByteString], [B.ByteString]))
+getTakenCreated hash = smembers "polls" >>= \case
     Left _ -> dbErr
     Right ids ->
         multiExec ( do
@@ -264,6 +264,13 @@ getUserHistory hash = smembers "polls" >>= \case
             in  smembers key
         collectCreated i = hget ("poll:" `B.append` i) "author_created"
         filterOnAuthor ids ls = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ ls
+
+getMyPollsData :: B.ByteString -> Redis [[(B.ByteString, B.ByteString)]]
+getMyPollsData hash = getTakenCreated hash >>= \case
+    Right (taken, created) -> multiExec (sequence <$> traverse collectPoll (taken ++ created)) >>= \case
+        TxSuccess res -> pure res
+    where
+        collectPoll i = hgetall ("poll:" `B.append` i)
 
 {- Tests -}
 
@@ -308,7 +315,3 @@ mockSetStageGetPoll conn =
     in  getNow >>= \now -> connDo conn $ actions (encodeStrict . show $ now) >>= \case
             Left err  -> liftIO . print . renderError $ err
             Right res -> liftIO . print . show $ res
-
-main = initRedisConnection >>= \conn -> connDo conn $ getUserHistory "7475fa0b9d3dc2112b49e631acead1a3d52ad879f023debfe08aa460818a3fc2" >>= \case
-    Right r -> liftIO $ print r
-    Left _  -> liftIO $ print "failed"
