@@ -245,17 +245,19 @@ disablePolls ls = multiExec (sequence_ <$> traverse disablePoll ls) >>= \case
     where
         disablePoll l = hset ("poll:" `B.append` l) "active" "false"
 
-getUserHistory :: B.ByteString  -> Redis (Either (Err T.Text) ([B.ByteString],[B.ByteString]))
+getUserHistory :: B.ByteString -> Redis (Either (Err T.Text) ([B.ByteString], [B.ByteString]))
 getUserHistory hash = smembers "polls" >>= \case
     Left _ -> dbErr
-    Right ids -> do
-        taken <- traverse collectParticipated ids >>= (\case
-            Right taken -> pure taken) . sequence
-        created <- traverse collectCreated ids >>= (\case
-            Right mb_strings -> pure . catMaybes $ mb_strings) . sequence
-        let mytaken = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ taken
-            mycreated = HMS.keys . HMS.filter (== hash) . HMS.fromList . zip ids $ created
-        pure . Right $ (mycreated, mytaken)
+    Right ids ->
+        multiExec ( do
+        taken <- sequence <$> traverse collectParticipated ids
+        created <- sequence <$> traverse collectCreated ids
+        return $ (,) <$> taken <*> created ) >>= \case
+        TxSuccess (taken, mb_created) ->
+            let mytaken = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ taken
+                mycreated = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ mb_created
+            in  pure . Right $ (mytaken, mycreated)
+        _ -> dbErr
     where
         collectParticipated i =
             let key = "participants_hashes:" `B.append` i
