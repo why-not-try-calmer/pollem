@@ -262,7 +262,7 @@ getUserHistory hash = smembers "polls" >>= \case
         collectParticipated i =
             let key = "participants_hashes:" `B.append` i
             in  smembers key
-        collectCreated i = hget ("poll:" `B.append` i) "author_token"  -- FIX ME TO AUTHOR_HASH
+        collectCreated i = hget ("poll:" `B.append` i) "author_hash"  -- FIX ME TO AUTHOR_HASH
 
 {- Tests -}
 
