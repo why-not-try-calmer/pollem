@@ -113,7 +113,7 @@ newtype RespWarmup = RespWarmup T.Text
 $(deriveJSON defaultOptions ''RespWarmup)
 
 data RespMyHistory = RespMyHistory {
-    resp_myhistory         :: Maybe (HMS.HashMap T.Text [(T.Text, T.Text)]),
+    resp_myhistory_polls         :: Maybe (HMS.HashMap T.Text [(T.Text, T.Text)]),
     resp_myhistory_taken   :: Maybe [T.Text],
     resp_myhistory_created :: Maybe [T.Text],
     resp_myhistory_msg     :: T.Text

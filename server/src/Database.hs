@@ -9,7 +9,6 @@ import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson             (decodeStrict)
 import           Data.Aeson.Extra       (encodeStrict)
-import           Data.Bifunctor         (Bifunctor (bimap))
 import qualified Data.ByteString        as B
 import           Data.ByteString.Char8  (readInt, unsnoc)
 import qualified Data.HashMap.Strict    as HMS
@@ -266,14 +265,15 @@ getTakenCreated hash = smembers "polls" >>= \case
         collectCreated i = hget ("poll:" `B.append` i) "author_token"
         filterOnAuthor ids ls = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ ls
 
---getMyPollsData :: B.ByteString -> Redis (Either (Err T.Text) (HMS.HashMap T.Text [(T.Text, T.Text)]))
+getMyPollsData :: B.ByteString -> Redis (Either (Err T.Text) (HMS.HashMap T.Text [(T.Text, T.Text)], [T.Text], [T.Text]))
 getMyPollsData hash = getTakenCreated hash >>= \case
     Right (taken, created) ->
         let both = taken ++ created
         in  multiExec (sequence <$> traverse collectPoll both) >>= \case
             TxSuccess res ->
                 let both_txt = map decodeUtf8 both
-                    res_txt = map (map $ bimap decodeUtf8 decodeUtf8) res
+                    bi_map f (a, b) = (f a, f b)
+                    res_txt = map (map $ bi_map decodeUtf8) res
                     hmap = HMS.fromList . zip both_txt $ res_txt
                     taken_txt = map decodeUtf8 taken
                     created_txt = map decodeUtf8 created
