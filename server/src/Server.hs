@@ -139,8 +139,11 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
         myhistory (ReqMyHistory hash) =
             let hash_b = encodeUtf8 hash
             in  ask >>= \env -> liftIO (connDo (redisconn env) . getMyPollsData $ hash_b) >>= \case
-                Left err -> pure $ RespMyHistory Nothing $ R.renderError err
-                Right res -> pure $ RespMyHistory (Just res) "Here's you history."
+                Left err -> pure $ RespMyHistory Nothing Nothing Nothing $ R.renderError err
+                Right (hmap, taken, created) -> 
+                    let mb l = if null l then Nothing else Just l
+                        finish = RespMyHistory (mb hmap) (mb taken) (mb created) "Here's you history."
+                    in  pure finish
 
         take :: ReqTake -> AppM RespTake
         take (ReqTake hash token finger pollid answers) = do

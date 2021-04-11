@@ -712,6 +712,18 @@ export default {
                 this.$toast.success(res.resp_take_msg)
             );
         },
+        restoreHistory() {
+            const payload = { 
+                req_myhistory_hash: this.user.hash,
+                req_myhistory_token: this.user.token
+            }
+            return this.makeReq("/myhistory", payload).then(res => {
+                if (res.resp_myhistory !== null) {
+                    this.$toast.success(res.resp_myhistory_msg)
+                    // . . .
+                } else this.$toast.error(res.resp_myhistory_msg)
+            })
+        },
         logout() {
             this.user = {
                 token: "",
