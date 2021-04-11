@@ -73,7 +73,10 @@ data ReqTake = ReqTake {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqTake)
 
-newtype ReqMyHistory = ReqMyHistory { myhistory_hash :: T.Text }
+data ReqMyHistory = ReqMyHistory { 
+    myhistory_hash :: T.Text,
+    myhistory_token :: T.Text
+}
 $(deriveJSON defaultOptions ''ReqMyHistory)
 --
 
@@ -113,7 +116,7 @@ newtype RespWarmup = RespWarmup T.Text
 $(deriveJSON defaultOptions ''RespWarmup)
 
 data RespMyHistory = RespMyHistory {
-    resp_myhistory_polls         :: Maybe (HMS.HashMap T.Text [(T.Text, T.Text)]),
+    resp_myhistory_polls   :: Maybe (HMS.HashMap T.Text [(T.Text, T.Text)]),
     resp_myhistory_taken   :: Maybe [T.Text],
     resp_myhistory_created :: Maybe [T.Text],
     resp_myhistory_msg     :: T.Text

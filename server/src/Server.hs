@@ -136,7 +136,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                             else pure $ RespGet "Ok" (Just poll) Nothing
 
         myhistory :: ReqMyHistory -> AppM RespMyHistory
-        myhistory (ReqMyHistory hash) =
+        myhistory (ReqMyHistory hash token) =
             let hash_b = encodeUtf8 hash
             in  ask >>= \env -> liftIO (connDo (redisconn env) . getMyPollsData $ hash_b) >>= \case
                 Left err -> pure $ RespMyHistory Nothing Nothing Nothing $ R.renderError err

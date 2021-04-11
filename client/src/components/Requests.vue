@@ -290,28 +290,55 @@
                         Create the poll
                     </button>
                 </tab>
-                <tab v-if="mypolls" title="My Polls">
-                    <p class="font-bold">Created</p>
-                    <div
-                        v-for="(t, k) in user.created"
-                        :key="k"
-                        class="grid grid-cols-3 gap-1"
-                    >
-                        <input :value="t.question" disabled />
-                        <input :value="t.startDate" disabled />
-                        <input v-if="t.endDate" :value="t.endDate" disabled />
-                        <a :href="t.link">Go to poll</a>
+                <tab title="My Polls">
+                    <div v-if="mypolls">
+                        <p v-if="user.created.length > 0" class="font-bold">Created</p>
+                        <div
+                            v-for="(t, k) in user.created"
+                            :key="k"
+                            class="grid grid-cols-3 gap-1"
+                        >
+                            <input :value="t.question" disabled />
+                            <input :value="t.startDate" disabled />
+                            <input
+                                v-if="t.endDate"
+                                :value="t.endDate"
+                                disabled
+                            />
+                            <a :href="t.link">Go to poll</a>
+                        </div>
+                        <p v-if="user.taken.length > 0" class="font-bold">Taken</p>
+                        <div
+                            v-for="(t, k) in user.taken"
+                            :key="k"
+                            class="grid grid-cols-3 gap-1"
+                        >
+                            <input :value="t.question" disabled />
+                            <input :value="t.startDate" disabled />
+                            <input
+                                v-if="t.endDate"
+                                :value="t.endDate"
+                                disabled
+                            />
+                            <a :href="t.link">Go to poll</a>
+                        </div>
                     </div>
-                    <p class="font-bold">Taken</p>
-                    <div
-                        v-for="(t, k) in user.taken"
-                        :key="k"
-                        class="grid grid-cols-3 gap-1"
-                    >
-                        <input :value="t.question" disabled />
-                        <input :value="t.startDate" disabled />
-                        <input v-if="t.endDate" :value="t.endDate" disabled />
-                        <a :href="t.link">Go to poll</a>
+                    <div v-else>
+                        <p>
+                            You've taken or created polls you think should be
+                            displayed here? You can retrieve your entire
+                            history. Please be considerate in your use of this
+                            feature, as the database is not optimized for this
+                            (expect serious debounce). Also your last created
+                            poll might be missing if you created it very
+                            recently.
+                        </p>
+                        <button
+                            @click="restoreHistory"
+                            class="p-1 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
+                        >
+                            Retrieve entire history
+                        </button>
                     </div>
                 </tab>
             </tabs>
@@ -362,11 +389,13 @@ const Requests = {
     tryRoute(route) {
         const routes = [
             "/ask_token",
+            "/close",
             "/confirm_token",
             "/create",
-            "/close",
             "/get",
+            "/myhistory",
             "/take",
+            "/warmup",
         ];
         if (routes.some((r) => r === route)) return route;
         else return null;
@@ -431,6 +460,8 @@ export default {
                     // restoring storage
                     this.user =
                         Storage.get() === null ? this.user : Storage.get();
+                    this.user.created = [];
+                    this.user.taken = [];
                     // saving fingerprint to component's data
                     this.user.fingerprint = result.visitorId;
                 }
@@ -663,24 +694,27 @@ export default {
                 poll_description: this.creatingPoll.description,
                 poll_multiple: this.creatingPoll.multiple,
                 poll_visible: this.creatingPoll.visible,
-                poll_answers: this.creatingPoll.answers
-            }
+                poll_answers: this.creatingPoll.answers,
+            };
             let payload = {
                 create_hash: this.user.hash,
                 create_token: this.user.token,
-                create_startDate: this.creatingPoll.startDate
-            }
+                create_startDate: this.creatingPoll.startDate,
+            };
             if (this.creatingPoll.endDate !== null) {
-                recipe.poll_endDate = this.creatingPoll.endDate
+                recipe.poll_endDate = this.creatingPoll.endDate;
                 payload.create_endDate = this.creatingPoll.endDate;
             }
-            payload.create_recipe = JSON.stringify(recipe)
+            payload.create_recipe = JSON.stringify(recipe);
             return this.makeReq("/create", payload).then((res) => {
                 this.$toast.success(res.resp_create_msg);
                 let createdPoll = {
                     question: this.creatingPoll.question,
                     startDate: this.creatingPoll.startDate,
-                    link: Requests[this.AppMode] + "/" + res.resp_create_pollid.toString(),
+                    link:
+                        Requests[this.AppMode] +
+                        "/" +
+                        res.resp_create_pollid.toString(),
                 };
                 if (this.creatingPoll.endDate)
                     createdPoll.endDate = this.creatingPoll.endDate;
@@ -713,16 +747,32 @@ export default {
             );
         },
         restoreHistory() {
-            const payload = { 
-                req_myhistory_hash: this.user.hash,
-                req_myhistory_token: this.user.token
-            }
-            return this.makeReq("/myhistory", payload).then(res => {
+            const payload = {
+                myhistory_hash: this.user.hash,
+                myhistory_token: this.user.token,
+            };
+            this.user.created = [];
+            this.user.taken = [];
+            return this.makeReq("/myhistory", payload).then((res) => {
                 if (res.resp_myhistory !== null) {
-                    this.$toast.success(res.resp_myhistory_msg)
-                    // . . .
-                } else this.$toast.error(res.resp_myhistory_msg)
-            })
+                    this.$toast.success(res.resp_myhistory_msg);
+                    console.log("Attempting to decode pol...");
+                    const mypolls = res.resp_myhistory_polls;
+                    const created = res.resp_myhistory_created;
+                    for (let [k, entry] of Object.entries(mypolls)) {
+                        const poll = JSON.parse(entry[2][1]);
+                        console.log(poll)
+                        const startDate = entry[3][2]
+                        const excerpt = {
+                            question: poll.poll_question,
+                            startDate: startDate,
+                            link: Requests[this.AppMode] + "/get/" + k.toString(),
+                        };
+                        if (created.includes(k)) this.user.created.push(excerpt);
+                        else this.user.taken.push(excerpt);
+                    }
+                } else this.$toast.error(res.resp_myhistory_msg);
+            });
         },
         logout() {
             this.user = {
