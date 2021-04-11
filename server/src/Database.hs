@@ -9,6 +9,7 @@ import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson             (decodeStrict)
 import           Data.Aeson.Extra       (encodeStrict)
+import           Data.Bifunctor         (Bifunctor (bimap))
 import qualified Data.ByteString        as B
 import           Data.ByteString.Char8  (readInt, unsnoc)
 import qualified Data.HashMap.Strict    as HMS
@@ -21,7 +22,6 @@ import           ErrorsReplies
 import qualified ErrorsReplies          as R
 import           HandlersDataTypes
 import           Scheduler              (getNow)
-import Data.Bifunctor (Bifunctor(bimap))
 --
 
 {-- Requests to db: types --}
@@ -268,12 +268,12 @@ getTakenCreated hash = smembers "polls" >>= \case
 
 --getMyPollsData :: B.ByteString -> Redis (Either (Err T.Text) (HMS.HashMap T.Text [(T.Text, T.Text)]))
 getMyPollsData hash = getTakenCreated hash >>= \case
-    Right (taken, created) -> 
+    Right (taken, created) ->
         let both = taken ++ created
         in  multiExec (sequence <$> traverse collectPoll both) >>= \case
-            TxSuccess res -> 
+            TxSuccess res ->
                 let both_txt = map decodeUtf8 both
-                    res_txt = map (map $ bimap decodeUtf8 decodeUtf8) res 
+                    res_txt = map (map $ bimap decodeUtf8 decodeUtf8) res
                     hmap = HMS.fromList . zip both_txt $ res_txt
                     taken_txt = map decodeUtf8 taken
                     created_txt = map decodeUtf8 created
