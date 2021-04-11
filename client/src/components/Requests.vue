@@ -667,9 +667,14 @@ export default {
                     .catch((err) => this.$toast.error(err))
                     .then((res) => res.json());
             else {
-                const missing_keys = Requests.post[route].filter(k => !Object.keys(payload).includes(k))
-                if (mising_keys.length > 0) {
-                    this.$toast.error("Missing key(s) from payload: " + JSON.stringify(missing_keys))
+                const missing_keys = Requests.post[route].filter(
+                    (k) => !Object.keys(payload).includes(k)
+                );
+                if (missing_keys.length > 0) {
+                    this.$toast.error(
+                        "Missing key(s) from payload: " +
+                            JSON.stringify(missing_keys)
+                    );
                     return;
                 }
                 const config = {
@@ -704,15 +709,17 @@ export default {
                 confirm_fingerprint: this.user.fingerprint,
                 confirm_email: this.user.email,
             };
-            return this.makeReq("post", "confirm_token", payload).then((res) => {
-                if (res.resp_confirm_token && res.resp_confirm_hash) {
-                    this.user.token = res.resp_confirm_token;
-                    this.user.hash = res.resp_confirm_hash;
-                    this.$toast.success(res.resp_confirm_msg);
-                } else {
-                    this.$toast.warning(res.resp_confirm_msg);
+            return this.makeReq("post", "confirm_token", payload).then(
+                (res) => {
+                    if (res.resp_confirm_token && res.resp_confirm_hash) {
+                        this.user.token = res.resp_confirm_token;
+                        this.user.hash = res.resp_confirm_hash;
+                        this.$toast.success(res.resp_confirm_msg);
+                    } else {
+                        this.$toast.warning(res.resp_confirm_msg);
+                    }
                 }
-            });
+            );
         },
         createPoll() {
             let recipe = {
