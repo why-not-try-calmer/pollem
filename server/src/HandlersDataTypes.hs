@@ -13,26 +13,26 @@ import           Crypto.Number.Generate
 import           "cryptonite" Crypto.Random
 import           Data.Aeson
 import qualified Data.Aeson                 as J
+import           Data.Aeson.Extra           (encodeStrict)
 import           Data.Aeson.TH
 import qualified Data.ByteString            as B
 import qualified Data.HashMap.Strict        as HMS
 import qualified Data.Text                  as T
 import           Data.Text.Encoding         (encodeUtf8)
 import           Data.Time                  (UTCTime (UTCTime))
-import Data.Aeson.Extra (encodeStrict)
 --
 
 {- Requests -}
 
 --
 data Poll = Poll {
-    poll_startDate           :: T.Text,
-    poll_endDate             :: Maybe T.Text,
-    poll_question            :: T.Text ,
-    poll_description         :: T.Text,
-    poll_multiple            :: Bool,
-    poll_visible             :: Bool,
-    poll_answers             :: [T.Text]
+    poll_startDate   :: T.Text,
+    poll_endDate     :: Maybe T.Text,
+    poll_question    :: T.Text ,
+    poll_description :: T.Text,
+    poll_multiple    :: Bool,
+    poll_visible     :: Bool,
+    poll_answers     :: [T.Text]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Poll)
 
@@ -72,6 +72,9 @@ data ReqTake = ReqTake {
     take_results     :: [Int]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqTake)
+
+newtype ReqMyHistory = ReqMyHistory { myhistory_hash :: T.Text }
+$(deriveJSON defaultOptions ''ReqMyHistory)
 --
 
 {- Responses -}
@@ -87,8 +90,8 @@ data RespConfirmToken = RespConfirmToken {
 }
 $(deriveJSON defaultOptions ''RespConfirmToken)
 
-data RespCreate = RespCreate { 
-    resp_create_msg :: T.Text,
+data RespCreate = RespCreate {
+    resp_create_msg    :: T.Text,
     resp_create_pollid :: Maybe Int
 }
 $(deriveJSON defaultOptions ''RespCreate)
@@ -108,6 +111,12 @@ $(deriveJSON defaultOptions ''RespGet)
 
 newtype RespWarmup = RespWarmup T.Text
 $(deriveJSON defaultOptions ''RespWarmup)
+
+data RespMyHistory = RespMyHistory {
+    resp_myhistory :: Maybe (HMS.HashMap T.Text [(T.Text, T.Text)]),
+    resp_msg       :: T.Text
+}
+$(deriveJSON defaultOptions ''RespMyHistory)
 --
 
 {- Stateful types -}

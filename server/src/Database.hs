@@ -21,6 +21,7 @@ import           ErrorsReplies
 import qualified ErrorsReplies          as R
 import           HandlersDataTypes
 import           Scheduler              (getNow)
+import Data.Bifunctor (Bifunctor(bimap))
 --
 
 {-- Requests to db: types --}
@@ -262,15 +263,19 @@ getTakenCreated hash = smembers "polls" >>= \case
         collectParticipated i =
             let key = "participants_hashes:" `B.append` i
             in  smembers key
-        collectCreated i = hget ("poll:" `B.append` i) "author_created"
+        collectCreated i = hget ("poll:" `B.append` i) "author_token"
         filterOnAuthor ids ls = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ ls
 
-getMyPollsData :: B.ByteString -> Redis [(B.ByteString, [(B.ByteString, B.ByteString)])]
+getMyPollsData :: B.ByteString -> Redis (Either (Err T.Text) (HMS.HashMap T.Text [(T.Text, T.Text)]))
 getMyPollsData hash = getTakenCreated hash >>= \case
-            Right (taken, created) -> 
-                let both = taken ++ created
-                in  multiExec (sequence <$> traverse collectPoll both) >>= \case
-                    TxSuccess res -> pure . zip both $ res
+    Right (taken, created) -> 
+        let both = taken ++ created
+        in  multiExec (sequence <$> traverse collectPoll both) >>= \case
+            TxSuccess res -> 
+                let both_txt = map decodeUtf8 both
+                    res_txt = map (map $ bimap decodeUtf8 decodeUtf8) res 
+                in  pure . Right . HMS.fromList . zip both_txt $ res_txt
+            TxError err -> pure . Left . R.Err R.Custom $ T.pack err
     where
         collectPoll i = hgetall ("poll:" `B.append` i)
 

@@ -41,6 +41,7 @@ type API =
     "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespCreate :<|>
     "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
     "get" :> Capture "poll_id" Int :> Get '[JSON] RespGet :<|>
+    "myhistory" :> ReqBody '[JSON] ReqMyHistory :> Post '[JSON] RespMyHistory :<|>
     "take" :> ReqBody '[JSON] ReqTake :> Post '[JSON] RespTake :<|>
     "warmup" :> Get '[JSON] RespWarmup
 
@@ -48,7 +49,7 @@ api :: Proxy API
 api = Proxy
 
 server :: ServerT API AppM
-server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take :<|> warmup
+server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhistory :<|> take :<|> warmup
     where
         ask_token :: ReqAskToken -> AppM RespAskToken
         ask_token (ReqAskToken email) = do
@@ -87,7 +88,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take 
                 recipe_b = encodeUtf8 recipe
                 startDate_b = encodeUtf8 startDate
                 mb_endDate_b = (\x -> case isoOrCustom . T.unpack $ x of
-                    Left _   -> Nothing
+                    Left _  -> Nothing
                     Right _ -> Just . encodeUtf8 $ x) =<< endDate
             env <- ask
             either_nb <- liftIO $ connDo (redisconn env) getPollsNb
@@ -133,6 +134,13 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> take 
                             modifyMVar_ (pollcache env) (\_ -> pure $ HMS.insert pollid_b (poll, mb_scores, now) hmap)
                             if poll_visible poll then pure $ RespGet "Ok" (Just poll) mb_scores
                             else pure $ RespGet "Ok" (Just poll) Nothing
+
+        myhistory :: ReqMyHistory -> AppM RespMyHistory
+        myhistory (ReqMyHistory hash) =
+            let hash_b = encodeUtf8 hash
+            in  ask >>= \env -> liftIO (connDo (redisconn env) . getMyPollsData $ hash_b) >>= \case
+                Left err -> pure $ RespMyHistory Nothing $ R.renderError err
+                Right res -> pure $ RespMyHistory (Just res) "Here's you history."
 
         take :: ReqTake -> AppM RespTake
         take (ReqTake hash token finger pollid answers) = do
