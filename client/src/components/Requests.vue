@@ -292,7 +292,9 @@
                 </tab>
                 <tab title="My Polls">
                     <div v-if="mypolls">
-                        <p v-if="user.created.length > 0" class="font-bold">Created</p>
+                        <p v-if="user.created.length > 0" class="font-bold">
+                            Created
+                        </p>
                         <div
                             v-for="(t, k) in user.created"
                             :key="k"
@@ -307,7 +309,9 @@
                             />
                             <a :href="t.link">Go to poll</a>
                         </div>
-                        <p v-if="user.taken.length > 0" class="font-bold">Taken</p>
+                        <p v-if="user.taken.length > 0" class="font-bold">
+                            Taken
+                        </p>
                         <div
                             v-for="(t, k) in user.taken"
                             :key="k"
@@ -386,18 +390,36 @@ const Requests = {
         dev: "http://localhost:8009",
         prod: "https://pollem-now.herokuapp.com",
     },
-    tryRoute(route) {
-        const routes = [
-            "/ask_token",
-            "/close",
-            "/confirm_token",
-            "/create",
-            "/get",
-            "/myhistory",
-            "/take",
-            "/warmup",
-        ];
-        if (routes.some((r) => r === route)) return route;
+    routes: {
+        post: {
+            ask_token: ["ask_email"],
+            close: ["close_hash", "close_token", "close_pollid"],
+            confirm_token: [
+                "confirm_token",
+                "confirm_fingerprint",
+                "confirm_email",
+            ],
+            create: [
+                "poll_startDate",
+                "poll_question",
+                "poll_description",
+                "poll_visible",
+                "poll_multiple",
+                "poll_answers",
+            ],
+            myhistory: ["myhistory_hash", "myhistory_token"],
+            take: [
+                "take_fingerprint",
+                "take_hash",
+                "take_token",
+                "take_results",
+            ],
+        },
+        get: ["get", "warmup"],
+    },
+    tryRoute(method, route) {
+        if (Object.keys(this.routes[method]).some((r) => r === route))
+            return "/" + route;
         else return null;
     },
 };
@@ -632,19 +654,29 @@ export default {
             this.creatingPoll.answers.pop();
         },
         // ----------- REQUESTS --------------
-        makeReq(route, payload) {
-            const e = Requests.endpoints[this.AppMode]; // Requests.endpoints["prod"]
-            const r = Requests.tryRoute(route);
+        makeReq(method, route, payload) {
+            const e = Requests.endpoints[this.AppMode];
+            const r = Requests.tryRoute(method, route);
             if (r === null) {
                 this.$toast.error("Bad endpoint! Request aborted.");
                 return;
             }
             const url = e + r;
-            if (route === "/get")
+            if (Requests.routes.get.some(i) === r)
                 return fetch(url)
                     .catch((err) => this.$toast.error(err))
                     .then((res) => res.json());
             else {
+                const missing_keys = Requests.post[route].filter(
+                    (k) => !Object.keys(payload).includes(k)
+                );
+                if (missing_keys.length > 0) {
+                    this.$toast.error(
+                        "Missing key(s) from payload: " +
+                            JSON.stringify(missing_keys)
+                    );
+                    return;
+                }
                 const config = {
                     headers: {
                         "Content-Type": "application/json",
@@ -663,7 +695,7 @@ export default {
             const payload = {
                 ask_email: this.user.email,
             };
-            return this.makeReq("/ask_token", payload).then((res) => {
+            return this.makeReq("post", "ask_token", payload).then((res) => {
                 this.$toast.success(res.resp_ask_token, {
                     duration: 15000,
                     dismissible: false,
@@ -677,15 +709,17 @@ export default {
                 confirm_fingerprint: this.user.fingerprint,
                 confirm_email: this.user.email,
             };
-            return this.makeReq("/confirm_token", payload).then((res) => {
-                if (res.resp_confirm_token && res.resp_confirm_hash) {
-                    this.user.token = res.resp_confirm_token;
-                    this.user.hash = res.resp_confirm_hash;
-                    this.$toast.success(res.resp_confirm_msg);
-                } else {
-                    this.$toast.warning(res.resp_confirm_msg);
+            return this.makeReq("post", "confirm_token", payload).then(
+                (res) => {
+                    if (res.resp_confirm_token && res.resp_confirm_hash) {
+                        this.user.token = res.resp_confirm_token;
+                        this.user.hash = res.resp_confirm_hash;
+                        this.$toast.success(res.resp_confirm_msg);
+                    } else {
+                        this.$toast.warning(res.resp_confirm_msg);
+                    }
                 }
-            });
+            );
         },
         createPoll() {
             let recipe = {
@@ -706,7 +740,7 @@ export default {
                 payload.create_endDate = this.creatingPoll.endDate;
             }
             payload.create_recipe = JSON.stringify(recipe);
-            return this.makeReq("/create", payload).then((res) => {
+            return this.makeReq("post", "create", payload).then((res) => {
                 this.$toast.success(res.resp_create_msg);
                 let createdPoll = {
                     question: this.creatingPoll.question,
@@ -727,7 +761,7 @@ export default {
                 close_token: this.user.token,
                 close_pollid: PollId,
             };
-            return this.makeReq("/close", payload).then((res) =>
+            return this.makeReq("post", "close", payload).then((res) =>
                 this.$toast.success(res.resp_close_msg)
             );
         },
@@ -742,7 +776,7 @@ export default {
                 ),
                 take_pollid: PollId,
             };
-            return this.makeReq("/take", payload).then((res) =>
+            return this.makeReq("post", "take", payload).then((res) =>
                 this.$toast.success(res.resp_take_msg)
             );
         },
@@ -753,7 +787,7 @@ export default {
             };
             this.user.created = [];
             this.user.taken = [];
-            return this.makeReq("/myhistory", payload).then((res) => {
+            return this.makeReq("post", "myhistory", payload).then((res) => {
                 if (res.resp_myhistory !== null) {
                     this.$toast.success(res.resp_myhistory_msg);
                     console.log("Attempting to decode pol...");
@@ -761,14 +795,16 @@ export default {
                     const created = res.resp_myhistory_created;
                     for (let [k, entry] of Object.entries(mypolls)) {
                         const poll = JSON.parse(entry[2][1]);
-                        console.log(poll)
-                        const startDate = entry[3][2]
+                        console.log(poll);
+                        const startDate = entry[3][2];
                         const excerpt = {
                             question: poll.poll_question,
                             startDate: startDate,
-                            link: Requests[this.AppMode] + "/get/" + k.toString(),
+                            link:
+                                Requests[this.AppMode] + "/get/" + k.toString(),
                         };
-                        if (created.includes(k)) this.user.created.push(excerpt);
+                        if (created.includes(k))
+                            this.user.created.push(excerpt);
                         else this.user.taken.push(excerpt);
                     }
                 } else this.$toast.error(res.resp_myhistory_msg);

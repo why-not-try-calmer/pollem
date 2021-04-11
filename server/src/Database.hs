@@ -262,7 +262,7 @@ getTakenCreated hash = smembers "polls" >>= \case
         collectParticipated i =
             let key = "participants_hashes:" `B.append` i
             in  smembers key
-        collectCreated i = hget ("poll:" `B.append` i) "author_token"
+        collectCreated i = hget ("poll:" `B.append` i) "author_hash"
         filterOnAuthor ids ls = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ ls
 
 getMyPollsData :: B.ByteString -> Redis (Either (Err T.Text) (HMS.HashMap T.Text [(T.Text, T.Text)], [T.Text], [T.Text]))
