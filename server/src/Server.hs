@@ -40,7 +40,7 @@ type API =
     "confirm_token" :> ReqBody '[JSON] ReqConfirmToken :> Post '[JSON] RespConfirmToken :<|>
     "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespCreate :<|>
     "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
-    "get" :> Capture "poll_id" Int :> Get '[JSON] RespGet :<|>
+    "get" :> Capture "poll_id" Int :> QueryParam "secret" String :> Get '[JSON] RespGet :<|>
     "myhistory" :> ReqBody '[JSON] ReqMyHistory :> Post '[JSON] RespMyHistory :<|>
     "take" :> ReqBody '[JSON] ReqTake :> Post '[JSON] RespTake :<|>
     "warmup" :> Get '[JSON] RespWarmup
@@ -116,27 +116,34 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 Left err -> pure . RespClose . R.renderError $ err
                 Right ok -> pure $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)
 
-        get :: Int -> AppM RespGet
-        get pollid = do
+        get :: Int -> Maybe String -> AppM RespGet
+        get pollid secret_req = do
             env <- ask
             liftIO $ do
                 now <- getNow
                 hmap <- readMVar . pollcache $ env
                 case HMS.lookup pollid_b hmap of
-                    Just (poll, mb_scores, _) ->
-                        if poll_visible poll then goFetch pollid_b env now
-                        else do
-                            updateCache env pollid_b now
-                            pure $ finish poll mb_scores
+                    Just (poll, mb_scores, _, mb_secret_stored) ->
+                        let valid = fromMaybe False $ (==) <$> mb_secret_req <*> mb_secret_stored
+                        in  if not valid && isJust mb_secret_stored then pure $ RespGet stop Nothing Nothing else
+                            if poll_visible poll then goFetch pollid_b env now
+                            else do
+                                updateCache env pollid_b now
+                                pure $ finish poll mb_scores
                     Nothing -> goFetch pollid_b env now
             where
                 pollid_b = encodeStrict pollid
+                mb_secret_req = T.pack <$> secret_req
+                isJust (Just x) = True
+                isJust Nothing = False
                 goFetch pollid env now = liftIO (connDo (redisconn env) . getPoll $ SGet pollid) >>= \case
                     Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
-                    Right (poll, mb_scores) -> do
+                    Right (poll, mb_scores, mb_secret) -> do
                         updateCache env pollid now
                         pure $ finish poll mb_scores
-                updateCache env pollid now = modifyMVar_ (pollcache env) (pure . HMS.update (\(a, b, _) -> Just (a, b, now)) pollid)
+                updateCache env pollid now = modifyMVar_ (pollcache env) (pure . HMS.update (\(a, b, _, d) -> Just (a, b, now, d)) pollid)
+                err = R.Err R.BadSecret (mempty :: T.Text)
+                stop = R.renderError err
                 finish poll mb_scores = RespGet "Ok" (Just poll) mb_scores
 
         myhistory :: ReqMyHistory -> AppM RespMyHistory

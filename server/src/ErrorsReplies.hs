@@ -8,7 +8,7 @@ import qualified Data.Text as T
 data ErrT =
     BadEmail | EmailTaken | PollExists | PollNotExist | PollIncomplete |
     PollTakenAlready |EmptyString | TokenNotExist | Database |
-    UserNotExist | PollInactive | UserNotVerified | BorkedData | Custom | SendGridError | DatetimeFormat deriving (Eq, Show)
+    UserNotExist | PollInactive | UserNotVerified | BorkedData | Custom | SendGridError | DatetimeFormat | BadSecret deriving (Eq, Show)
 
 data Err a = Err ErrT a deriving (Eq, Show)
 
@@ -19,6 +19,7 @@ addToText v s = T.append s . T.pack . show $ s
 
 renderError :: (Show a) => Err a -> T.Text
 renderError (Err BadEmail v) = addToText v "This email is not formatted property: "
+renderError (Err BadSecret _) = "This poll is private but your secret does not match ours. Sorry."
 renderError (Err BorkedData _) = "Cannot work on this probably corrupted data."
 renderError (Err Custom v) = addToText v mempty
 renderError (Err Database _) = "Database error: Couldn't satisfy server request."

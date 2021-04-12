@@ -32,6 +32,7 @@ data Poll = Poll {
     poll_description :: T.Text,
     poll_multiple    :: Bool,
     poll_visible     :: Bool,
+    poll_secret      :: Bool,
     poll_answers     :: [T.Text]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Poll)
@@ -73,8 +74,8 @@ data ReqTake = ReqTake {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqTake)
 
-data ReqMyHistory = ReqMyHistory { 
-    myhistory_hash :: T.Text,
+data ReqMyHistory = ReqMyHistory {
+    myhistory_hash  :: T.Text,
     myhistory_token :: T.Text
 }
 $(deriveJSON defaultOptions ''ReqMyHistory)
@@ -135,12 +136,13 @@ mockPoll = Poll {
     poll_endDate = Just "2021-03-16T14:15:14+01:00",
     poll_multiple = True,
     poll_visible = True,
-    poll_answers = ["First", "Second", "Third"]
+    poll_answers = ["First", "Second", "Third"],
+    poll_secret = False
 }
 
 type PollCreator = MVar (Int, SystemDRG)
 
-type PollCache = MVar (HMS.HashMap B.ByteString (Poll, Maybe [Int], UTCTime))
+type PollCache = MVar (HMS.HashMap B.ByteString (Poll, Maybe [Int], UTCTime, Maybe T.Text))
 
 initState :: IO PollCreator
 initState = do

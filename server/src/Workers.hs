@@ -33,7 +33,7 @@ sweeperWorker conn mvar = do
         Left err  -> print . R.renderError $ err
         Right msg -> print . R.renderOk $ msg
     {- purges cache from every entry that is more than 1-month old -}
-    modifyMVar_ mvar $ pure . HMS.filter (\(_,_,date) -> fresherThanOneMonth date now_system)
+    modifyMVar_ mvar $ pure . HMS.filter (\(_,_,date, _) -> fresherThanOneMonth date now_system)
 
 runSweeperWorker :: PollCache -> Connection -> IO (Async())
 runSweeperWorker mvar conn =

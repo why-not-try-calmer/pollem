@@ -175,7 +175,7 @@ submit (SAnswer hash token finger pollid answers) =
                                     _  -> pure . Left . R.Err Database $ "Database error"
                     _   -> pure . Left . R.Err Database $ "User or poll data missingFrom."
 
-getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Maybe [Int]))
+getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Maybe [Int], Maybe B.ByteString  ))
 getPoll (SGet pollid) =
     let pollid_txt = decodeUtf8 pollid
         key = ("poll:" `B.append` pollid)
@@ -188,13 +188,14 @@ getPoll (SGet pollid) =
                     if null participants then hgetall ("poll:" `B.append` pollid) >>= \case
                         Right poll_raw ->
                             let poll_metadata = M.fromList poll_raw
+                                mb_secret = M.lookup "secret" poll_metadata
                             in  case M.lookup "recipe" poll_metadata of
                                     Nothing -> borked
                                     Just recipe -> case decodeStrict recipe :: Maybe Poll of
                                         Nothing -> do
                                             liftIO . print $ recipe
                                             borked
-                                        Just poll -> pure . Right $ (poll, Nothing)
+                                        Just poll -> pure . Right $ (poll, Nothing, mb_secret)
                     else let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
                     in  multiExec ( do
                         answers <- collectAnswers
@@ -215,7 +216,7 @@ getPoll (SGet pollid) =
                                         Nothing -> borked
                                         Just recipe -> case decodeStrict recipe :: Maybe Poll of
                                             Nothing -> borked
-                                            Just poll -> pure . Right $ (poll, Just $ reverse collected)
+                                            Just poll -> pure . Right $ (poll, Just $ reverse collected, M.lookup "secret" poll_metadata)
                             Nothing -> borked
     where   decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
             decodeByteList val acc = traverse (fmap fst . readInt) val : acc
@@ -310,7 +311,7 @@ tSubmitAnswers =
         answers = ["0","0","1","1","1"]
     in submit $ SAnswer hash token fingerprint pollid answers
 
-tGetPoll :: Redis (Either (Err T.Text) (Poll, Maybe [Int]))
+tGetPoll :: Redis (Either (Err T.Text) (Poll, Maybe [Int], Maybe B.ByteString))
 tGetPoll = let pollid = "1" in getPoll . SGet $ pollid
 
 mockSetStageGetPoll :: Connection -> IO ()
