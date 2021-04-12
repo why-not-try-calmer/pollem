@@ -359,6 +359,7 @@ import Tab from "./Tab";
 import { ref } from "vue";
 
 let PollId = null;
+let PollSecret = null;
 
 const Replies = {
     noLocalStorage:
@@ -425,6 +426,26 @@ const Requests = {
             return "/" + route;
         else return null;
     },
+    ascertain(uri) {
+        const s = uri.split("/"),
+            g = s[3],
+            mb_param = s[4];
+        if (g !== "get") return { secret: null, pollid: null };
+        if (mb_param.includes("secret")) {
+            const head = mb_param.split("?"),
+                body = head[1],
+                secret = body.split("=")[1],
+                pollid = head[0];
+            return {
+                pollid,
+                secret,
+            };
+        }
+        return {
+            pollid: mb_param,
+            secret: null,
+        };
+    },
 };
 
 export default {
@@ -445,6 +466,7 @@ export default {
                 description: "description...",
                 multiple: false,
                 visible: false,
+                private: false,
                 answers: ["Answer#1", "Answer#2"],
             },
             takingPoll: {},
@@ -466,10 +488,11 @@ export default {
     },
     setup() {
         // ---------LOADING -------------
-        const possible_get = window.location.href.split("/");
+        const { pollid, secret } = Requests.ascertain(window.location.href);
         let active;
-        if (possible_get.includes("get")) {
-            PollId = parseInt(possible_get.pop());
+        if (pollid !== null) {
+            PollId = parseInt(pollid);
+            PollSecret = secret;
             active = ref(1);
         } else active = ref(0);
         return { active };
@@ -499,7 +522,49 @@ export default {
                     return;
                     // otherwise fetching poll passed as parameter
                 }
+                if (PollSecret === null)
+                    return (
+                        fetch(
+                            Requests.endpoints[this.AppMode] +
+                                "/get/" +
+                                PollId.toString()
+                        )
+                            // error, bubbling up to user
+                            .catch((err) => this.$toast.error(err))
+                            // parsing result
+                            .then((res) => res.json())
+                            // binding results to component's data, displaying, bubbling up confirmation
+                            .then((res) => {
+                                if (!res.resp_get_poll) {
+                                    this.$toast.error(
+                                        "Either the poll was not received or could not be decoded, aborting. Unable to carry on."
+                                    );
+                                    return;
+                                }
+                                const poll = JSON.parse(res.resp_get_poll);
+                                this.takingPoll = poll;
+                                this.takingPoll.results = poll.answers.map(
+                                    (a) => ({
+                                        text: a,
+                                        value: false,
+                                    })
+                                );
+                                if (res.resp_get_poll_results) {
+                                    this.chart.results = res.resp_get_poll_results.map(
+                                        (d) => parseInt(d)
+                                    );
+                                    this.setChartOptions();
+                                }
+                                this.$toast.success(
+                                    Replies.loaded +
+                                        " Here is your poll. (" +
+                                        res.resp_get_poll_msg +
+                                        ")"
+                                );
+                            })
+                    );
                 return (
+                    // WORKING HERE . . .
                     fetch(
                         Requests.endpoints[this.AppMode] +
                             "/get/" +
@@ -510,32 +575,7 @@ export default {
                         // parsing result
                         .then((res) => res.json())
                         // binding results to component's data, displaying, bubbling up confirmation
-                        .then((res) => {
-                            if (!res.resp_get_poll) {
-                                this.$toast.error(
-                                    "Either the poll was not received or could not be decoded, aborting. Unable to carry on."
-                                );
-                                return;
-                            }
-                            const poll = JSON.parse(res.resp_get_poll);
-                            this.takingPoll = poll;
-                            this.takingPoll.results = poll.answers.map((a) => ({
-                                text: a,
-                                value: false,
-                            }));
-                            if (res.resp_get_poll_results) {
-                                this.chart.results = res.resp_get_poll_results.map(
-                                    (d) => parseInt(d)
-                                );
-                                this.setChartOptions();
-                            }
-                            this.$toast.success(
-                                Replies.loaded +
-                                    " Here is your poll. (" +
-                                    res.resp_get_poll_msg +
-                                    ")"
-                            );
-                        })
+                        .then((res) => {})
                 );
             });
     },
