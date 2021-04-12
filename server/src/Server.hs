@@ -134,11 +134,13 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                             else
                                 if poll_visible poll then goFetch pollid_b env now
                                 else do
+                                    -- updating cache
                                     updateCache env pollid_b now
                                     pure $ finish poll mb_scores
                     Nothing -> liftIO (connDo (redisconn env) . getPoll $ SGet pollid_b) >>= \case
                         Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
                         Right (poll, mb_scores, mb_secret) -> do
+                            -- adding to cache
                             modifyMVar_ (pollcache env) (pure . HMS.insert pollid_b (poll, mb_scores, now, mb_secret_req))
                             pure $ finish poll mb_scores
             where
