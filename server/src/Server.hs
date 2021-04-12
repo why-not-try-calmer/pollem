@@ -117,33 +117,34 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 Right ok -> pure $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)
 
         get :: Int -> AppM RespGet
-        get pollid =
-            let pollid_b = encodeStrict pollid
-                req = SGet pollid_b
-            in  do
-                env <- ask
-                liftIO $ do
-                    now <- getNow
-                    hmap <- readMVar . pollcache $ env
-                    let fetchPoll pollid = connDo (redisconn env) . getPoll $ SGet pollid
-                    res <- case HMS.lookup pollid_b hmap of
-                        Just (poll, mb_scores, _) ->
-                            if poll_visible poll then fetchPoll pollid_b
-                            else pure $ Right (poll, mb_scores)
-                        Nothing -> fetchPoll pollid_b
-                    case res of
-                        Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
-                        Right (poll, mb_scores) -> do
-                                modifyMVar_ (pollcache env) (pure . HMS.update (\(a, b, _) -> Just (a, b, now)) pollid_b)
-                                if poll_visible poll then pure $ RespGet "Ok" (Just poll) mb_scores
-                                else pure $ RespGet "Ok" (Just poll) Nothing
+        get pollid = do
+            env <- ask
+            liftIO $ do
+                now <- getNow
+                hmap <- readMVar . pollcache $ env
+                case HMS.lookup pollid_b hmap of
+                    Just (poll, mb_scores, _) ->
+                        if poll_visible poll then goFetch pollid_b env now
+                        else do
+                            updateCache env pollid_b now
+                            pure $ finish poll mb_scores
+                    Nothing -> goFetch pollid_b env now
+            where
+                pollid_b = encodeStrict pollid
+                goFetch pollid env now = liftIO (connDo (redisconn env) . getPoll $ SGet pollid) >>= \case
+                    Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
+                    Right (poll, mb_scores) -> do
+                        updateCache env pollid now
+                        pure $ finish poll mb_scores
+                updateCache env pollid now = modifyMVar_ (pollcache env) (pure . HMS.update (\(a, b, _) -> Just (a, b, now)) pollid)
+                finish poll mb_scores = RespGet "Ok" (Just poll) mb_scores
 
         myhistory :: ReqMyHistory -> AppM RespMyHistory
         myhistory (ReqMyHistory hash token) =
             let hash_b = encodeUtf8 hash
             in  ask >>= \env -> liftIO (connDo (redisconn env) . getMyPollsData $ hash_b) >>= \case
                 Left err -> pure $ RespMyHistory Nothing Nothing Nothing $ R.renderError err
-                Right (hmap, taken, created) -> 
+                Right (hmap, taken, created) ->
                     let mb l = if null l then Nothing else Just l
                         finish = RespMyHistory (mb hmap) (mb taken) (mb created) "Here's you history."
                     in  pure finish
