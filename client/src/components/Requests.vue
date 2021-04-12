@@ -662,7 +662,7 @@ export default {
                 return;
             }
             const url = e + r;
-            if (Requests.routes.get.some(i) === r)
+            if (Requests.routes.get.some(i => i === r))
                 return fetch(url)
                     .catch((err) => this.$toast.error(err))
                     .then((res) => res.json());
