@@ -98,7 +98,7 @@ submit (SAsk hash token) = -- hash + token generated a first time from the handl
                     pure . Right . R.Ok $ "Bear in mind that this email address is registered already. I will send you a verification email nonetheless. You don't need to use it unless you want to re-authenticate your email address."
                 else do
                     hmset key [("token", token),("verified", "false")] -- this structure is not typed! perhaps do it
-                    pure . Right . R.Ok $ "Thanks, please check your email"
+                    pure . Right . R.Ok $ "Thanks, please check your email. Expect between 30s and 5 minutes latency from the email provider."
 submit (SConfirm token fingerprint hash) = -- hash generated from the handler, token sent by the user, which on match with DB proves that the hash is from a confirmed email address.
     let key = "user:" `B.append` hash
     in  exists key >>= \case
