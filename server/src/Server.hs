@@ -82,7 +82,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 Right msg -> pure $ RespConfirmToken (R.renderOk msg) (Just . decodeUtf8 $ hashed) (Just token)
 
         create :: ReqCreate -> AppM RespCreate
-        create (ReqCreate hash token recipe startDate endDate) = do
+        create (ReqCreate hash token recipe startDate endDate mb_secret) = do
             let hash_b = encodeUtf8 hash
                 token_b = encodeUtf8 token
                 recipe_b = encodeUtf8 recipe
@@ -91,20 +91,26 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                     Left _  -> Nothing
                     Right _ -> Just . encodeUtf8 $ x) =<< endDate
             env <- ask
-            either_nb <- liftIO $ connDo (redisconn env) getPollsNb
-            case either_nb of
+            liftIO (connDo (redisconn env) getPollsNb) >>= \case
                 Left err -> pure $ RespCreate (R.renderError err) Nothing
                 Right nb ->
                     let pollid = encodeStrict (nb+1)
-                    in  liftIO $ do
-                        case isoOrCustom . T.unpack $ startDate of
-                            Left _ -> pure $ RespCreate (R.renderError (R.Err R.DatetimeFormat (mempty :: T.Text))) Nothing
-                            Right date -> do
-                                modifyMVar_ (pollmanager env) $ \p -> pure (nb, snd p)
-                                res <- connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b mb_endDate_b
-                                case res of
-                                    Left err -> pure $ RespCreate (R.renderError err) Nothing
-                                    Right msg -> pure $ RespCreate (R.renderOk msg) (Just nb)
+                        takeManager = takeMVar . pollmanager $ env
+                    in  do
+                        mb_secret' <- liftIO $ do
+                            (n,g) <- takeManager
+                            secret <- createToken g $ encodeUtf8 startDate
+                            putMVar (pollmanager env) (n,g)
+                            pure $ fmap (pure . B.init . B.tail . encodeStrict $ secret) mb_secret
+                        liftIO $ do
+                            case isoOrCustom . T.unpack $ startDate of
+                                Left _ -> pure $ RespCreate (R.renderError (R.Err R.DatetimeFormat (mempty :: T.Text))) Nothing
+                                Right date -> do
+                                    modifyMVar_ (pollmanager env) $ \p -> pure (nb, snd p)
+                                    res <- connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b mb_endDate_b mb_secret'
+                                    case res of
+                                        Left err -> pure $ RespCreate (R.renderError err) Nothing
+                                        Right msg -> pure $ RespCreate (R.renderOk msg) (Just nb) 
 
         close :: ReqClose -> AppM RespClose
         close (ReqClose hash token pollid) = do
@@ -135,7 +141,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 pollid_b = encodeStrict pollid
                 mb_secret_req = T.pack <$> secret_req
                 isJust (Just x) = True
-                isJust Nothing = False
+                isJust Nothing  = False
                 goFetch pollid env now = liftIO (connDo (redisconn env) . getPoll $ SGet pollid) >>= \case
                     Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
                     Right (poll, mb_scores, mb_secret) -> do

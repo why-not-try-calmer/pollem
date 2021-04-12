@@ -33,7 +33,8 @@ data DbReq =
         create_poll_id        :: B.ByteString,
         create_poll_recipe    :: B.ByteString,
         create_poll_startDate :: B.ByteString,
-        create_poll_endDate   :: Maybe B.ByteString
+        create_poll_endDate   :: Maybe B.ByteString,
+        create_poll_secret    :: Maybe B.ByteString
     } |
     SClose  {
         close_hash    :: B.ByteString,
@@ -115,14 +116,14 @@ submit (SConfirm token fingerprint hash) = -- hash generated from the handler, t
                             sadd "users" [hash]
                             pure . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
                         else noUser
-submit (SCreate hash token pollid recipe startDate endDate) =
+submit (SCreate hash token pollid recipe startDate mb_endDate mb_secret) =
     let pollid_txt = decodeUtf8 pollid
         key = "user:" `B.append` hash
         payload =
             let base = [("author_hash", hash),("recipe",recipe),("startDate",startDate),("active","true")]
-            in  case endDate of
-                    Just e  -> ("endDate", e):base
-                    Nothing -> base
+                endDate = (\v -> pure ("endDate" :: B.ByteString , v)) =<< mb_endDate
+                secret = (\v -> pure ("secret" :: B.ByteString , v)) =<< mb_secret
+            in  base ++ catMaybes [endDate, secret]
     in  exists ("poll:" `B.append` pollid) >>= \case
         Left err -> dbErr
         Right verdict ->
@@ -300,7 +301,7 @@ tCreatePoll hash now =
         recipe = encodeStrict poll
         token = "token1"
         date_now d = encodeStrict . show $ d
-    in  submit $ SCreate hash token pollid recipe now Nothing
+    in  submit $ SCreate hash token pollid recipe now Nothing Nothing
 
 tSubmitAnswers :: Redis (Either (Err T.Text) (Ok T.Text))
 tSubmitAnswers =

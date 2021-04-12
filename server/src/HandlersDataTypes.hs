@@ -54,7 +54,8 @@ data ReqCreate = ReqCreate {
     create_token     :: T.Text,
     create_recipe    :: T.Text,
     create_startDate :: T.Text,
-    create_endDate   :: Maybe T.Text
+    create_endDate   :: Maybe T.Text,
+    create_secret    :: Maybe Bool
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqCreate)
 
