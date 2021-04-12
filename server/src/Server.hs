@@ -125,15 +125,18 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 liftIO $ do
                     now <- getNow
                     hmap <- readMVar . pollcache $ env
+                    let fetchPoll pollid = connDo (redisconn env) . getPoll $ SGet pollid
                     res <- case HMS.lookup pollid_b hmap of
-                        Just (poll, mb_scores, _) -> pure $ Right (poll, mb_scores)
-                        Nothing -> connDo (redisconn env) . getPoll $ SGet pollid_b
+                        Just (poll, mb_scores, _) ->
+                            if poll_visible poll then fetchPoll pollid_b
+                            else pure $ Right (poll, mb_scores)
+                        Nothing -> fetchPoll pollid_b
                     case res of
                         Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
                         Right (poll, mb_scores) -> do
-                            modifyMVar_ (pollcache env) (\_ -> pure $ HMS.insert pollid_b (poll, mb_scores, now) hmap)
-                            if poll_visible poll then pure $ RespGet "Ok" (Just poll) mb_scores
-                            else pure $ RespGet "Ok" (Just poll) Nothing
+                                modifyMVar_ (pollcache env) (pure . HMS.update (\(a, b, _) -> Just (a, b, now)) pollid_b)
+                                if poll_visible poll then pure $ RespGet "Ok" (Just poll) mb_scores
+                                else pure $ RespGet "Ok" (Just poll) Nothing
 
         myhistory :: ReqMyHistory -> AppM RespMyHistory
         myhistory (ReqMyHistory hash token) =
