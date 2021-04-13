@@ -65,9 +65,9 @@ data DbReq =
 --
 initRedisConnection :: IO Connection
 initRedisConnection = connect $ defaultConnectInfo {
-    connectHost ="ec2-54-216-43-206.eu-west-1.compute.amazonaws.com",
-    connectPort = PortNumber 27680,
-    connectAuth = Just "p17df6aa47fbc3f8dfcbcbfba00334ecece8b39a921ed91d97f6a9eeefd8d1793"
+    connectHost ="ec2-34-241-92-218.eu-west-1.compute.amazonaws.com",
+    connectPort = PortNumber 31540 :: PortID,
+    connectAuth = Just "pd2d6d24f45281ce70ca2ef92b60ff5a8c99a4f1dd0054c4bcb460cc2bac2cd7b" :: Maybe B.ByteString
 }
 
 connDo :: Connection -> Redis a -> IO a
@@ -328,3 +328,11 @@ mockSetStageGetPoll conn =
     in  getNow >>= \now -> connDo conn $ actions (encodeStrict . show $ now) >>= \case
             Left err  -> liftIO . print . renderError $ err
             Right res -> liftIO . print . show $ res
+
+connInfo :: ConnectInfo
+connInfo = defaultConnectInfo {
+    connectHost ="ec2-34-241-92-218.eu-west-1.compute.amazonaws.com",
+    connectPort = PortNumber 31540 :: PortID,
+    connectAuth = Just "pd2d6d24f45281ce70ca2ef92b60ff5a8c99a4f1dd0054c4bcb460cc2bac2cd7b" :: Maybe B.ByteString
+}
+main = initRedisConnection >>= \h -> connDo h info >>= print . show

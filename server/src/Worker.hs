@@ -51,9 +51,9 @@ runSweeperWorker mvar conn =
     cache <- initCache
     connector <- initRedisConnection
     runSweeperWorker cache connector
--}
 main = do
     conn <- initRedisConnection
     runRedis conn $ do
         res <- info
         liftIO . print $ res
+-}
