@@ -790,7 +790,7 @@ export default {
                         Requests.endpoints[this.AppMode] +
                         "/" +
                         res.resp_create_pollid.toString(),
-                    secret: res.resp_create_pollsecret
+                    secret: res.resp_create_pollsecret,
                 };
                 if (this.creatingPoll.endDate)
                     createdPoll.endDate = this.creatingPoll.endDate;
@@ -839,13 +839,15 @@ export default {
                         const poll = JSON.parse(entry[2][1]);
                         console.log(poll);
                         const startDate = entry[3][2];
+                        const secret = entry[3][3]
                         const excerpt = {
                             question: poll.poll_question,
-                            startDate: startDate,
                             link:
                                 Requests.endpoints[this.AppMode] +
                                 "/get/" +
                                 k.toString(),
+                            startDate,
+                            secret
                         };
                         if (created.includes(k))
                             this.user.created.push(excerpt);
