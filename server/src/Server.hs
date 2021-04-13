@@ -30,7 +30,7 @@ import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
-import           Scheduler                   (getNow, isoOrCustom, schedule)
+import           Scheduler                   (getNow, isoOrCustom)
 import           Servant
 import           System.Environment          (getEnvironment)
 import           Workers
@@ -126,7 +126,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 now <- getNow
                 hmap <- readMVar . pollcache $ env
                 case HMS.lookup pollid_b hmap of
-                    -- not binding third element as we don't care about datetimes for /get
+                    -- poll, scores, endDate, secret
                     Just (poll, mb_scores, _, mb_secret_stored) ->
                         let noMatch = not $ fromMaybe False $ (==) <$> mb_secret_req <*> mb_secret_stored
                         in  if isJust mb_secret_stored && noMatch

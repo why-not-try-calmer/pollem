@@ -20,7 +20,6 @@ import           Scheduler                (fresherThanOneMonth, getNow,
 sweeperWorker :: Connection -> PollCache -> IO ()
 sweeperWorker conn mvar = do
     now <- getNow
-    now_system <- getSystemTime
     res <- connDo conn $ getResults >>= \case
         Right pollidDate ->
             let accOutdated (i, d) acc = case isoOrCustom . show $ d of
@@ -33,7 +32,7 @@ sweeperWorker conn mvar = do
         Left err  -> print . R.renderError $ err
         Right msg -> print . R.renderOk $ msg
     {- purges cache from every entry that is more than 1-month old -}
-    modifyMVar_ mvar $ pure . HMS.filter (\(_,_,date, _) -> fresherThanOneMonth date now_system)
+    modifyMVar_ mvar $ pure . HMS.filter (\(_,_,date, _) -> fresherThanOneMonth date now)
 
 runSweeperWorker :: PollCache -> Connection -> IO (Async())
 runSweeperWorker mvar conn =

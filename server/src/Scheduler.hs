@@ -1,16 +1,17 @@
 module Scheduler where
 
-import           Control.Concurrent       (threadDelay)
-import           Data.Time                (ZonedTime, defaultTimeLocale,
-                                           parseTimeM, zonedTimeToUTC)
-import           Data.Time.Clock
-import           Data.Time.Clock.POSIX    (systemToPOSIXTime,
-                                           utcTimeToPOSIXSeconds)
-import           Data.Time.Clock.System   (SystemTime, getSystemTime)
-import           Data.Time.Format.ISO8601 (iso8601ParseM)
+import Data.Time
+    ( UTCTime,
+      addUTCTime,
+      getCurrentTime,
+      defaultTimeLocale,
+      parseTimeM,
+      zonedTimeToUTC,
+      NominalDiffTime,
+      ZonedTime )
+import Data.Time.Format.ISO8601 (iso8601ParseM)
 
-
-isoOrCustom :: String -> Either String UTCTime
+isoOrCustom :: [Char] -> Either [Char] UTCTime
 isoOrCustom s =
     let utc = iso8601ParseM s :: Maybe UTCTime
         zoned = iso8601ParseM s :: Maybe ZonedTime
@@ -26,6 +27,7 @@ isoOrCustom s =
             Nothing     -> toUTC s fs
             Just parsed -> Right parsed
 
+{-
 schedule :: String -> IO ()
 schedule s = case isoOrCustom s of
     Left s -> print $ "Error, couldn't match the given time " ++ s
@@ -39,15 +41,21 @@ schedule s = case isoOrCustom s of
                 threadDelay micros
                 print "Finished."
 
-fresherThanOneMonth :: UTCTime -> SystemTime -> Bool
-fresherThanOneMonth d now =
+fresherThanSecs :: UTCTime -> SystemTime -> Integer -> Bool
+fresherThanSecs d now t =
     let diff = utcTimeToPOSIXSeconds d - systemToPOSIXTime now
         secs = fst . properFraction . nominalDiffTimeToSeconds $ diff
-        oneMonth = 2592000
-    in secs < oneMonth
+    in secs < t
 
+fresherThanOneMonth :: UTCTime -> SystemTime -> Bool
+fresherThanOneMonth d now = fresherThanSecs d now 259200
+-}
 
 getNow :: IO UTCTime
 getNow = getCurrentTime
 
--- main = schedule "2021-03-14T14:15:14+01:00"
+fresherThan :: UTCTime -> UTCTime -> NominalDiffTime -> Bool
+fresherThan now target secs = now < secs `addUTCTime` target
+
+fresherThanOneMonth :: UTCTime -> UTCTime -> Bool
+fresherThanOneMonth now target = fresherThan now target 259200
