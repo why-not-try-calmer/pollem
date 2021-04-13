@@ -30,7 +30,7 @@ import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
-import           Scheduler                   (getNow, isoOrCustom, fresherThan)
+import           Scheduler                   (fresherThan, getNow, isoOrCustom)
 import           Servant
 import           System.Environment          (getEnvironment)
 import           Workers
@@ -82,7 +82,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 Right msg -> pure $ RespConfirmToken (R.renderOk msg) (Just . decodeUtf8 $ hashed) (Just token)
 
         create :: ReqCreate -> AppM RespCreate
-        create (ReqCreate hash token recipe startDate endDate mb_secret) = do
+        create (ReqCreate hash token recipe startDate endDate) = do
             let hash_b = encodeUtf8 hash
                 token_b = encodeUtf8 token
                 recipe_b = encodeUtf8 recipe
@@ -92,22 +92,24 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                     Right _ -> Just . encodeUtf8 $ x) =<< endDate
             env <- ask
             liftIO $ connDo (redisconn env) getPollsNb >>= \case
-                Left err -> pure $ RespCreate (R.renderError err) Nothing
-                Right nb ->
-                    let pollid = encodeStrict (nb+1)
+                Left err -> stopOn err
+                Right total ->
+                    let pollid = encodeStrict (total + 1)
                         takeManager = takeMVar . pollmanager $ env
                         produceSecret = do
                             (n,g) <- takeManager
                             secret <- createToken g $ encodeUtf8 startDate
                             putMVar (pollmanager env) (n,g)
-                            pure $ fmap (pure . B.init . B.tail . encodeStrict $ secret) mb_secret
+                            pure . B.init . B.tail . encodeStrict $ secret
                     in  do
-                        mb_secret' <- produceSecret
+                        secret <- produceSecret
                         case isoOrCustom . T.unpack $ startDate of
-                            Left _ -> pure $ RespCreate (R.renderError (R.Err R.DatetimeFormat (mempty :: T.Text))) Nothing
-                            Right date -> liftIO (connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b mb_endDate_b mb_secret') >>=
-                                \case   Left err -> pure $ RespCreate (R.renderError err) Nothing
-                                        Right msg -> pure $ RespCreate (R.renderOk msg) (Just nb)
+                            Left _ -> pure $ RespCreate (R.renderError (R.Err R.DatetimeFormat (mempty :: T.Text))) Nothing Nothing
+                            Right date -> liftIO (connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b mb_endDate_b secret) >>=
+                                \case   Left err -> stopOn err
+                                        Right msg -> pure $ RespCreate (R.renderOk msg) (Just $ total + 1) (Just . decodeUtf8 $ secret)
+            where
+                stopOn err = pure $ RespCreate (R.renderError err) Nothing Nothing
 
         close :: ReqClose -> AppM RespClose
         close (ReqClose hash token pollid) = do
@@ -128,37 +130,37 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 case HMS.lookup pollid_b hmap of
                     -- poll, scores, last accessed datetime, secret
                     Just (poll, mb_scores, _, mb_secret_stored) ->
-                        let noMatch = not . fromMaybe False $ (==) <$> mb_secret_req <*> mb_secret_stored
-                            running a Nothing = False
-                            running a mb_b = case poll_endDate poll of
-                                Just b -> case isoOrCustom . T.unpack $ b of Right b_date -> a < b_date
-                                _ -> False
-                        in  if running now (poll_endDate poll) && noMatch
-                            then pure $ RespGet stop Nothing Nothing
-                            else
-                                if poll_visible poll then goFetch pollid_b env now
-                                else do
-                                    -- updating cache
-                                    updateCache env pollid_b now
-                                    pure $ finish poll mb_scores
+                        if failsTest now poll mb_secret_stored then stop else
+                        if poll_visible poll then goFetch pollid_b env now else do
+                            -- updating cache
+                            updateCache env pollid_b now
+                            finish poll mb_scores
                     Nothing -> liftIO (connDo (redisconn env) . getPoll $ SGet pollid_b) >>= \case
-                        Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
-                        Right (poll, mb_scores, mb_secret) -> do
+                        Left err -> stop
+                        Right (poll, mb_scores, mb_secret_stored_b) ->
+                            if failsTest now poll (decodeUtf8 <$> mb_secret_stored_b) then stop else do
                             -- adding to cache
                             modifyMVar_ (pollcache env) (pure . HMS.insert pollid_b (poll, mb_scores, now, mb_secret_req))
-                            pure $ finish poll mb_scores
+                            finish poll mb_scores
             where
                 pollid_b = encodeStrict pollid
                 mb_secret_req = T.pack <$> secret_req
+                failsTest now poll mb_secret_stored =
+                    let noMatch = not . fromMaybe False $ (==) <$> mb_secret_req <*> mb_secret_stored
+                        running a Nothing = False
+                        running a mb_b = case poll_endDate poll of
+                            Just b -> case isoOrCustom . T.unpack $ b of Right b_date -> a < b_date
+                            _ -> False
+                    in  running now (poll_endDate poll) && noMatch
                 goFetch pollid env now = liftIO (connDo (redisconn env) . getPoll $ SGet pollid) >>= \case
                     Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
                     Right (poll, mb_scores, mb_secret) -> do
                         updateCache env pollid now
-                        pure $ finish poll mb_scores
+                        finish poll mb_scores
                 updateCache env pollid now = modifyMVar_ (pollcache env) (pure . HMS.update (\(a, b, _, d) -> Just (a, b, now, d)) pollid)
                 err = R.Err R.BadSecret (mempty :: T.Text)
-                stop = R.renderError err
-                finish poll mb_scores = RespGet "Ok" (Just poll) mb_scores
+                stop = pure $ RespGet (R.renderError err) Nothing Nothing
+                finish poll mb_scores = pure $ RespGet "Ok" (Just poll) mb_scores
 
         myhistory :: ReqMyHistory -> AppM RespMyHistory
         myhistory (ReqMyHistory hash token) =
