@@ -30,7 +30,7 @@ import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
-import           Scheduler                   (fresherThan, getNow, isoOrCustom)
+import           Times                   (fresherThan, getNow, isoOrCustom)
 import           Servant
 import           System.Environment          (getEnvironment)
 import           Workers

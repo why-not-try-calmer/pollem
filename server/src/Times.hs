@@ -1,4 +1,4 @@
-module Scheduler where
+module Times where
 
 import Data.Time
     ( UTCTime,

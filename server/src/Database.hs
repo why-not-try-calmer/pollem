@@ -4,7 +4,7 @@
 
 module Database where
 
-import           Computations
+import           Computations           (collect)
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson             (decodeStrict)
@@ -20,7 +20,7 @@ import           Database.Redis
 import           ErrorsReplies
 import qualified ErrorsReplies          as R
 import           HandlersDataTypes
-import           Scheduler              (getNow)
+import           Times                  (getNow)
 --
 
 {-- Requests to db: types --}
@@ -122,7 +122,7 @@ submit (SCreate hash token pollid recipe startDate mb_endDate secret) =
         payload =
             let base = [("author_hash", hash),("recipe",recipe),("startDate",startDate),("active","true")]
                 endDate = (\v -> pure ("endDate" :: B.ByteString , v)) =<< mb_endDate
-            in  base ++ catMaybes [endDate] 
+            in  base ++ catMaybes [endDate]
     in  exists ("poll:" `B.append` pollid) >>= \case
         Left err -> dbErr
         Right verdict ->

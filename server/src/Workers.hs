@@ -14,7 +14,7 @@ import           Database                 (_connDo, connDo, disablePolls,
 import           Database.Redis           (Connection)
 import qualified ErrorsReplies            as R
 import           HandlersDataTypes        (PollCache)
-import           Scheduler                (fresherThanOneMonth, getNow,
+import           Times                (fresherThanOneMonth, getNow,
                                            isoOrCustom)
 
 sweeperWorker :: Connection -> PollCache -> IO ()
