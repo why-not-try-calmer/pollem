@@ -47,6 +47,7 @@ runSweeperWorker mvar conn =
             let e' = e :: SomeException
             in  print $ "Caught exception, restarting: " ++ show e'
 
+{-
 main' = do
     cache <- initCache
     connector <- initRedisConnection
@@ -57,3 +58,4 @@ main = do
     runRedis conn $ info >>= \case
         Left err  -> liftIO $ print err
         Right res -> liftIO $ print res
+-}

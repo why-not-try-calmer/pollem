@@ -216,8 +216,8 @@ corsPolicy = cors (const $ Just policy)
 app :: Config -> Application
 app env = serve api . hoistServer api (injectEnv env) $ server
 
-startApp' :: IO ()
-startApp' = do
+startApp :: IO ()
+startApp = do
     {- discovering port offered by the host -}
     env <- getEnvironment
     let port = maybe 8009 read $ lookup "PORT" env
@@ -232,9 +232,3 @@ startApp' = do
     runSweeperWorker cache connector
     print $ "Server starting on port " ++ show port
     run port $ corsPolicy (app config)
-
-startApp = do
-    conn <- initRedisConnection
-    runRedis conn $ info >>= \case
-        Left err  -> liftIO $ print err
-        Right res -> liftIO $ print res
