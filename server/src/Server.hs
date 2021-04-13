@@ -39,7 +39,7 @@ type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
     "confirm_token" :> ReqBody '[JSON] ReqConfirmToken :> Post '[JSON] RespConfirmToken :<|>
     "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespCreate :<|>
-    "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
+    -- "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
     "get" :> Capture "poll_id" Int :> QueryParam "secret" String :> Get '[JSON] RespGet :<|>
     "myhistory" :> ReqBody '[JSON] ReqMyHistory :> Post '[JSON] RespMyHistory :<|>
     "take" :> ReqBody '[JSON] ReqTake :> Post '[JSON] RespTake :<|>
@@ -49,7 +49,7 @@ api :: Proxy API
 api = Proxy
 
 server :: ServerT API AppM
-server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhistory :<|> take :<|> warmup
+server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|> myhistory :<|> take :<|> warmup
     where
         ask_token :: ReqAskToken -> AppM RespAskToken
         ask_token (ReqAskToken email) = do
@@ -111,7 +111,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
             where
                 stopOn err = pure $ RespCreate (R.renderError err) Nothing Nothing
 
-        close :: ReqClose -> AppM RespClose
+        {-close :: ReqClose -> AppM RespClose
         close (ReqClose hash token pollid) = do
             let hash_b = encodeUtf8 hash
                 token_b = encodeUtf8 token
@@ -119,7 +119,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
             env <- ask
             liftIO (connDo (redisconn env) . submit $ SClose hash_b token_b pollid_b) >>= \case
                 Left err -> pure . RespClose . R.renderError $ err
-                Right ok -> pure $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)
+                Right ok -> pure $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)-}
 
         get :: Int -> Maybe String -> AppM RespGet
         get pollid secret_req = do
