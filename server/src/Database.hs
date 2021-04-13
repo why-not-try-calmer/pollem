@@ -65,7 +65,7 @@ data DbReq =
 --
 initRedisConnection :: IO Connection
 initRedisConnection = connect $ defaultConnectInfo {
-    connectHost ="ec2-108-128-25-66.eu-west-1.compute.amazonaws.com",
+    connectHost ="ec2-54-216-43-206.eu-west-1.compute.amazonaws.com",
     connectPort = PortNumber 14459,
     connectAuth = Just "p17df6aa47fbc3f8dfcbcbfba00334ecece8b39a921ed91d97f6a9eeefd8d1793"
 }
@@ -227,7 +227,9 @@ getPoll (SGet pollid) =
 getResults :: Redis (Either (Err T.Text) [(B.ByteString, B.ByteString)])
 getResults = smembers "polls" >>= \case
     Left _ -> dbErr
-    Right ids -> traverse collectEndifExists ids >>= \res -> pure . Right . catMaybes $ res
+    Right ids -> traverse collectEndifExists ids >>= \res -> do
+        liftIO $ print res
+        pure . Right . catMaybes $ res
     where
         collectEndifExists :: B.ByteString -> Redis (Maybe (B.ByteString, B.ByteString))
         collectEndifExists i =

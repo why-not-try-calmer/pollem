@@ -87,19 +87,19 @@
                 </tab>
                 <tab title="Take the poll">
                     <button
-                        v-if="AppMode === 'dev' && !takingPoll.startDate"
+                        v-if="AppMode === 'dev' && !pollOnDisplay.startDate"
                         @click="testChart"
                     >
                         Test chart
                     </button>
-                    <div v-if="takingPoll.startDate" class="mt-10">
-                        <div id="takingPoll" class="flex flex-col">
+                    <div v-if="pollOnDisplay.startDate" class="mt-10">
+                        <div id="pollOnDisplay" class="flex flex-col">
                             <div>
                                 <textarea
                                     id="takingQuestion"
                                     rows="2"
                                     cols="30"
-                                    :value="takingPoll.question"
+                                    :value="pollOnDisplay.question"
                                     disabled
                                 />
                             </div>
@@ -109,7 +109,7 @@
                                 ref="chart"
                                 v-if="
                                     chart.results.length > 0 &&
-                                    takingPoll.visible
+                                    pollOnDisplay.visible
                                 "
                             />
                             <div>
@@ -117,11 +117,11 @@
                                     id="takingDescription"
                                     rows="3"
                                     cols="45"
-                                    :value="takingPoll.description"
+                                    :value="pollOnDisplay.description"
                                     disabled
                                 />
                             </div>
-                            <div v-for="(a, k) in takingPoll.results" :key="k">
+                            <div v-for="(a, k) in pollOnDisplay.results" :key="k">
                                 <div>
                                     <label>{{ a.text }}</label>
                                     <input
@@ -140,7 +140,7 @@
                                     class="mx-3 mr-5"
                                     type="checkbox"
                                     id="takingMultiple"
-                                    :checked="takingPoll.multiple"
+                                    :checked="pollOnDisplay.multiple"
                                     disabled
                                 />
                                 <label for="takingVisible"
@@ -150,7 +150,7 @@
                                     class="mx-3 mr-5"
                                     type="checkbox"
                                     id="takingVisible"
-                                    :checked="takingPoll.visible"
+                                    :checked="pollOnDisplay.visible"
                                     disabled
                                 />
                             </div>
@@ -161,17 +161,17 @@
                                 <input
                                     type="text"
                                     id="takingStartDate"
-                                    :value="takingPoll.startDate"
+                                    :value="pollOnDisplay.startDate"
                                     disabled
                                 />
-                                <div v-if="takingPoll.endDate">
+                                <div v-if="pollOnDisplay.endDate">
                                     <label class="space-y-3" for="takingEndDate"
                                         >(optional) Poll due to close at:</label
                                     >
                                     <input
                                         type="text"
                                         id="takingEndDate"
-                                        :value="takingPoll.endDate"
+                                        :value="pollOnDisplay.endDate"
                                         disabled
                                     />
                                 </div>
@@ -469,7 +469,7 @@ export default {
                 private: false,
                 answers: ["Answer#1", "Answer#2"],
             },
-            takingPoll: {},
+            pollOnDisplay: {},
             chart: {
                 results: [],
                 options: {},
@@ -545,8 +545,8 @@ export default {
                                 return;
                             }
                             const poll = JSON.parse(res.resp_get_poll);
-                            this.takingPoll = poll;
-                            this.takingPoll.results = poll.answers.map((a) => ({
+                            this.pollOnDisplay = poll;
+                            this.pollOnDisplay.results = poll.answers.map((a) => ({
                                 text: a,
                                 value: false,
                             }));
@@ -576,7 +576,7 @@ export default {
             ].every((i) => i !== "");
         },
         chartStyle() {
-            const x = this.takingPoll.answers.length;
+            const x = this.pollOnDisplay.answers.length;
             return x === 0
                 ? null
                 : "width: 900px; height: " + (75 * x).toString() + "px";
@@ -586,90 +586,11 @@ export default {
         },
     },
     methods: {
-        testUser() {
-            this.user.email = "garbo email";
-            this.user.hash = "garbo hash";
-            this.user.fingerprint = "garbo fingerprint";
-            this.user.token = "garbo token";
-        },
-        testChart() {
-            const mockPoll = {
-                startDate: new Date(),
-                question: "How to make an omelette without breaking any egg?",
-                description: "Some description",
-                multiple: false,
-                visible: true,
-                answers: [
-                    "AnswerA",
-                    "AnswerB",
-                    "AnswerC",
-                    "AnswerD",
-                    "AnswerE",
-                    "AnswerF",
-                    "AnswerG",
-                ],
-            };
-            const payload = {
-                resp_get_poll_results: [3, 5, 9, 8, 7, 8, 1],
-                resp_get_poll: JSON.stringify(mockPoll),
-                resp_get_poll_msg: "Ok fine",
-            };
-            return Promise.resolve(JSON.stringify(payload))
-                .catch((err) => this.$toast.error(err))
-                .then((res) => {
-                    const p = JSON.parse(res);
-                    this.takingPoll = JSON.parse(p.resp_get_poll);
-                    this.takingPoll.results = this.takingPoll.answers.map(
-                        (a) => ({ text: a, value: false })
-                    );
-                    if (p.resp_get_poll_results) {
-                        this.chart.results = p.resp_get_poll_results.map((d) =>
-                            parseInt(d)
-                        );
-                        this.setChartOptions();
-                    }
-                    this.$toast.success(p.resp_get_poll_msg);
-                });
-        },
-        testSubmitPoll() {
-            const payload = {
-                take_fingerprint: this.user.fingerprint,
-                take_hash: this.user.hash,
-                take_token: this.user.token,
-                take_results: this.takingPoll.answers.map(
-                    (r) =>
-                        this.takingPoll.results.find((x) => x.text === r).value
-                ),
-                take_pollid: PollId,
-            };
-            console.log(JSON.stringify(payload));
-        },
-        setChartOptions() {
-            this.chart.options = {
-                yAxis: {
-                    type: "category",
-                    data: [].concat(this.takingPoll.answers).reverse(), // apparently echart applies some weird sorting
-                },
-                xAxis: {
-                    type: "value",
-                },
-                series: [
-                    {
-                        data: this.chart.results,
-                        type: "bar",
-                        showBackground: false,
-                        backgroundStyle: {
-                            color: "rgba(0, 177, 124, 1)",
-                        },
-                    },
-                ],
-            };
-        },
         toggleResults(k) {
-            this.takingPoll.results[k].value = !this.takingPoll.results[k]
+            this.pollOnDisplay.results[k].value = !this.pollOnDisplay.results[k]
                 .value;
-            if (!this.takingPoll.multiple)
-                this.takingPoll.results.forEach(
+            if (!this.pollOnDisplay.multiple)
+                this.pollOnDisplay.results.forEach(
                     (item, index) =>
                         (item.value = index === k ? item.value : false)
                 );
@@ -812,9 +733,9 @@ export default {
                 take_fingerprint: this.user.fingerprint,
                 take_hash: this.user.hash,
                 take_token: this.user.token,
-                take_results: this.takingPoll.answers.map(
+                take_results: this.pollOnDisplay.answers.map(
                     (r) =>
-                        this.takingPoll.results.find((x) => x.text === r).value
+                        this.pollOnDisplay.results.find((x) => x.text === r).value
                 ),
                 take_pollid: PollId,
             };

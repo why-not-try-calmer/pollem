@@ -1,4 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Workers where
 
 import           Control.Concurrent
@@ -11,14 +13,15 @@ import           Data.Time                (UTCTime (UTCTime))
 import           Data.Time.Clock.System   (getSystemTime)
 import           Database                 (_connDo, connDo, disablePolls,
                                            getResults, initRedisConnection)
-import           Database.Redis           (Connection)
+import           Database.Redis           (Connection, runRedis, keys, info)
 import qualified ErrorsReplies            as R
-import           HandlersDataTypes        (PollCache)
+import           HandlersDataTypes        (PollCache, initCache)
 import           Times                (fresherThanOneMonth, getNow,
                                            isoOrCustom)
 
 sweeperWorker :: Connection -> PollCache -> IO ()
 sweeperWorker conn mvar = do
+    print "Attempting to sweep..."
     now <- getNow
     res <- connDo conn $ getResults >>= \case
         Right pollidDate ->
@@ -28,6 +31,7 @@ sweeperWorker conn mvar = do
                 collectedActiveOutdated = foldr accOutdated [] pollidDate
             {- disable every poll whose endDate is in the past -}
             in  disablePolls collectedActiveOutdated
+    print "Got results."
     case res of
         Left err  -> print . R.renderError $ err
         Right msg -> print . R.renderOk $ msg
@@ -43,4 +47,17 @@ runSweeperWorker mvar conn =
         threadDelay $ 1000000 * 3600
         `catch` \e ->
             let e' = e :: SomeException
-            in  print "caught exception, restarting..."
+            in  do
+                print "caught exception, restarting..."
+                print e'
+
+main' = do
+    cache <- initCache
+    connector <- initRedisConnection
+    runSweeperWorker cache connector
+
+main = do
+    conn <- initRedisConnection
+    runRedis conn $ info >>= \case
+        Left err -> liftIO $ print err
+        Right res -> liftIO $ print res
