@@ -522,60 +522,47 @@ export default {
                     return;
                     // otherwise fetching poll passed as parameter
                 }
-                if (PollSecret === null)
-                    return (
-                        fetch(
-                            Requests.endpoints[this.AppMode] +
-                                "/get/" +
-                                PollId.toString()
-                        )
-                            // error, bubbling up to user
-                            .catch((err) => this.$toast.error(err))
-                            // parsing result
-                            .then((res) => res.json())
-                            // binding results to component's data, displaying, bubbling up confirmation
-                            .then((res) => {
-                                if (!res.resp_get_poll) {
-                                    this.$toast.error(
-                                        "Either the poll was not received or could not be decoded, aborting. Unable to carry on."
-                                    );
-                                    return;
-                                }
-                                const poll = JSON.parse(res.resp_get_poll);
-                                this.takingPoll = poll;
-                                this.takingPoll.results = poll.answers.map(
-                                    (a) => ({
-                                        text: a,
-                                        value: false,
-                                    })
-                                );
-                                if (res.resp_get_poll_results) {
-                                    this.chart.results = res.resp_get_poll_results.map(
-                                        (d) => parseInt(d)
-                                    );
-                                    this.setChartOptions();
-                                }
-                                this.$toast.success(
-                                    Replies.loaded +
-                                        " Here is your poll. (" +
-                                        res.resp_get_poll_msg +
-                                        ")"
-                                );
-                            })
-                    );
+                const head =
+                    Requests.endpoints[this.AppMode] +
+                    "/get/" +
+                    PollId.toString();
+                const url =
+                    PollSecret === null
+                        ? head
+                        : head + "?secret=" + PollIdSecret;
                 return (
-                    // WORKING HERE . . .
-                    fetch(
-                        Requests.endpoints[this.AppMode] +
-                            "/get/" +
-                            PollId.toString()
-                    )
+                    fetch(url)
                         // error, bubbling up to user
                         .catch((err) => this.$toast.error(err))
                         // parsing result
                         .then((res) => res.json())
                         // binding results to component's data, displaying, bubbling up confirmation
-                        .then((res) => {})
+                        .then((res) => {
+                            if (!res.resp_get_poll) {
+                                this.$toast.error(
+                                    "Either the poll was not received or could not be decoded, aborting. Unable to carry on."
+                                );
+                                return;
+                            }
+                            const poll = JSON.parse(res.resp_get_poll);
+                            this.takingPoll = poll;
+                            this.takingPoll.results = poll.answers.map((a) => ({
+                                text: a,
+                                value: false,
+                            }));
+                            if (res.resp_get_poll_results) {
+                                this.chart.results = res.resp_get_poll_results.map(
+                                    (d) => parseInt(d)
+                                );
+                                this.setChartOptions();
+                            }
+                            this.$toast.success(
+                                Replies.loaded +
+                                    " Here is your poll. (" +
+                                    res.resp_get_poll_msg +
+                                    ")"
+                            );
+                        })
                 );
             });
     },
@@ -803,6 +790,7 @@ export default {
                         Requests.endpoints[this.AppMode] +
                         "/" +
                         res.resp_create_pollid.toString(),
+                    secret: res.resp_create_pollsecret
                 };
                 if (this.creatingPoll.endDate)
                     createdPoll.endDate = this.creatingPoll.endDate;

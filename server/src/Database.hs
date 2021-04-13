@@ -120,7 +120,7 @@ submit (SCreate hash token pollid recipe startDate mb_endDate secret) =
     let pollid_txt = decodeUtf8 pollid
         key = "user:" `B.append` hash
         payload =
-            let base = [("author_hash", hash),("recipe",recipe),("startDate",startDate),("active","true")]
+            let base = [("author_hash",hash),("secret",secret),("recipe",recipe),("startDate",startDate),("active","true")]
                 endDate = (\v -> pure ("endDate" :: B.ByteString , v)) =<< mb_endDate
             in  base ++ catMaybes [endDate]
     in  exists ("poll:" `B.append` pollid) >>= \case

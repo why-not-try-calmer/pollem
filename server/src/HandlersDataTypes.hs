@@ -32,7 +32,6 @@ data Poll = Poll {
     poll_description :: T.Text,
     poll_multiple    :: Bool,
     poll_visible     :: Bool,
-    poll_secret      :: Bool,
     poll_answers     :: [T.Text]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Poll)
@@ -97,7 +96,7 @@ $(deriveJSON defaultOptions ''RespConfirmToken)
 data RespCreate = RespCreate {
     resp_create_msg    :: T.Text,
     resp_create_pollid :: Maybe Int,
-    resp_create_secret :: Maybe T.Text
+    resp_create_pollsecret :: Maybe T.Text
 }
 $(deriveJSON defaultOptions ''RespCreate)
 
@@ -137,8 +136,7 @@ mockPoll = Poll {
     poll_endDate = Just "2021-03-16T14:15:14+01:00",
     poll_multiple = True,
     poll_visible = True,
-    poll_answers = ["First", "Second", "Third"],
-    poll_secret = False
+    poll_answers = ["First", "Second", "Third"]
 }
 
 type PollCreator = MVar (Int, SystemDRG)
