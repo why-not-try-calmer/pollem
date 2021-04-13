@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports    #-}
 {-# LANGUAGE StrictData        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 
@@ -7,10 +6,6 @@ module HandlersDataTypes where
 
 import           Control.Concurrent.MVar
 import           Control.Monad
-import           Crypto.Hash
-import           Crypto.KDF.BCrypt
-import           Crypto.Number.Generate
-import           "cryptonite" Crypto.Random
 import           Data.Aeson
 import qualified Data.Aeson                 as J
 import           Data.Aeson.Extra           (encodeStrict)
@@ -20,6 +15,7 @@ import qualified Data.HashMap.Strict        as HMS
 import qualified Data.Text                  as T
 import           Data.Text.Encoding         (encodeUtf8)
 import           Data.Time                  (UTCTime (UTCTime))
+import Crypto.Random (SystemDRG, getSystemDRG)
 --
 
 {- Requests -}
@@ -150,20 +146,3 @@ initState = do
 
 initCache :: IO PollCache
 initCache = newMVar HMS.empty
---
-
-{- Token -}
-
---
-createToken :: Monad m => SystemDRG -> B.ByteString -> m String
-createToken drg salt = do
-    let (bytes, gen) = randomBytes drg 16 :: (B.ByteString, SystemDRG)
-        digest = bcrypt 8 bytes (salt :: B.ByteString) :: B.ByteString
-    pure . show . hashWith SHA256 $ digest
-    where
-        randomBytes = flip randomBytesGenerate
-
-hashEmail email = show $ hashWith SHA256 email
-
-createPollId :: IO Integer
-createPollId = generateBetween 1 100000000

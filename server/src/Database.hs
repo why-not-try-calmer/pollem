@@ -50,7 +50,7 @@ data DbReq =
         confirm_fingerprint :: B.ByteString,
         confirm_hash        :: B.ByteString
     } |
-    SAnswer {
+    STake {
         answers_hash        :: B.ByteString,
         answers_token       :: B.ByteString,
         answers_fingerprint :: B.ByteString,
@@ -154,7 +154,7 @@ submit (SClose hash token pollid) =
                 pure . Right . R.Ok $ "This poll was closed: " `T.append` pollid_txt
             _ -> pure . Left . R.Err PollNotExist $ pollid_txt
 
-submit (SAnswer hash token finger pollid answers) =
+submit (STake hash token finger pollid answers) =
     let pollid_txt = decodeUtf8 pollid
         userKey = "user:" `B.append` hash
     in  multiExec ( do
@@ -309,7 +309,7 @@ tSubmitAnswers =
         pollid = "1"
         token= "token1"
         answers = ["0","0","1","1","1"]
-    in submit $ SAnswer hash token fingerprint pollid answers
+    in submit $ STake hash token fingerprint pollid answers
 
 tGetPoll :: Redis (Either (Err T.Text) (Poll, Maybe [Int], Maybe B.ByteString))
 tGetPoll = let pollid = "1" in getPoll . SGet $ pollid

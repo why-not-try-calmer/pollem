@@ -9,6 +9,7 @@ module Server
     , app
     ) where
 
+import Cryptog
 import           Control.Concurrent          (modifyMVar_, putMVar, readMVar,
                                               takeMVar, threadDelay)
 import           Control.Monad.Except        (ExceptT, runExceptT)
@@ -176,7 +177,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
         take (ReqTake hash token finger pollid answers) = do
             env <- ask
             res <- liftIO . connDo (redisconn env) . submit $
-                SAnswer (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeStrict . show $ pollid) (map encodeStrict answers)
+                STake (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeStrict . show $ pollid) (map encodeStrict answers)
             case res of
                 Left err  -> pure . RespTake . R.renderError $ err
                 Right msg -> pure . RespTake . R.renderOk $ msg

@@ -529,7 +529,7 @@ export default {
                 const url =
                     PollSecret === null
                         ? head
-                        : head + "?secret=" + PollIdSecret;
+                        : head + "?secret=" + PollSecret;
                 return (
                     fetch(url)
                         // error, bubbling up to user
