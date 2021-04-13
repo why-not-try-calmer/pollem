@@ -11,7 +11,7 @@ import Data.Time
       ZonedTime )
 import Data.Time.Format.ISO8601 (iso8601ParseM)
 
-isoOrCustom :: [Char] -> Either [Char] UTCTime
+isoOrCustom :: String -> Either String UTCTime
 isoOrCustom s =
     let utc = iso8601ParseM s :: Maybe UTCTime
         zoned = iso8601ParseM s :: Maybe ZonedTime

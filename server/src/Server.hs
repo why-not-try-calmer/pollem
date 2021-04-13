@@ -30,7 +30,7 @@ import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
-import           Scheduler                   (getNow, isoOrCustom)
+import           Scheduler                   (getNow, isoOrCustom, fresherThan)
 import           Servant
 import           System.Environment          (getEnvironment)
 import           Workers
@@ -126,10 +126,14 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 now <- getNow
                 hmap <- readMVar . pollcache $ env
                 case HMS.lookup pollid_b hmap of
-                    -- poll, scores, endDate, secret
+                    -- poll, scores, last accessed datetime, secret
                     Just (poll, mb_scores, _, mb_secret_stored) ->
-                        let noMatch = not $ fromMaybe False $ (==) <$> mb_secret_req <*> mb_secret_stored
-                        in  if isJust mb_secret_stored && noMatch
+                        let noMatch = not . fromMaybe False $ (==) <$> mb_secret_req <*> mb_secret_stored
+                            running a Nothing = False
+                            running a mb_b = case poll_endDate poll of
+                                Just b -> case isoOrCustom . T.unpack $ b of Right b_date -> a < b_date
+                                _ -> False
+                        in  if running now (poll_endDate poll) && noMatch
                             then pure $ RespGet stop Nothing Nothing
                             else
                                 if poll_visible poll then goFetch pollid_b env now
@@ -146,8 +150,6 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
             where
                 pollid_b = encodeStrict pollid
                 mb_secret_req = T.pack <$> secret_req
-                isJust (Just x) = True
-                isJust Nothing  = False
                 goFetch pollid env now = liftIO (connDo (redisconn env) . getPoll $ SGet pollid) >>= \case
                     Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
                     Right (poll, mb_scores, mb_secret) -> do
