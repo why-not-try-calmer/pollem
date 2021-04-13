@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Workers where
+module Worker where
 
 import           Control.Concurrent
 import           Control.Concurrent.Async
@@ -47,15 +47,13 @@ runSweeperWorker mvar conn =
             let e' = e :: SomeException
             in  print $ "Caught exception, restarting: " ++ show e'
 
-{-
-main' = do
+{-main' = do
     cache <- initCache
     connector <- initRedisConnection
     runSweeperWorker cache connector
-
+-}
 main = do
     conn <- initRedisConnection
-    runRedis conn $ info >>= \case
-        Left err  -> liftIO $ print err
-        Right res -> liftIO $ print res
--}
+    runRedis conn $ do
+        res <- info
+        liftIO . print $ res

@@ -34,7 +34,7 @@ import           Network.Wai.Middleware.Cors
 import           Times                   (fresherThan, getNow, isoOrCustom)
 import           Servant
 import           System.Environment          (getEnvironment)
-import           Workers
+import           Worker
 
 type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
