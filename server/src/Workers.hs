@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Workers where
@@ -9,14 +9,12 @@ import           Control.Exception
 import           Control.Monad
 import           Control.Monad.IO.Class   (liftIO)
 import qualified Data.HashMap.Strict      as HMS
-import           Data.Time                (UTCTime (UTCTime))
-import           Data.Time.Clock.System   (getSystemTime)
 import           Database                 (_connDo, connDo, disablePolls,
                                            getResults, initRedisConnection)
-import           Database.Redis           (Connection, runRedis, keys, info)
+import           Database.Redis           (Connection, info, keys, runRedis)
 import qualified ErrorsReplies            as R
 import           HandlersDataTypes        (PollCache, initCache)
-import           Times                (fresherThanOneMonth, getNow,
+import           Times                    (fresherThanOneMonth, getNow,
                                            isoOrCustom)
 
 sweeperWorker :: Connection -> PollCache -> IO ()
@@ -57,5 +55,5 @@ main' = do
 main = do
     conn <- initRedisConnection
     runRedis conn $ info >>= \case
-        Left err -> liftIO $ print err
+        Left err  -> liftIO $ print err
         Right res -> liftIO $ print res
