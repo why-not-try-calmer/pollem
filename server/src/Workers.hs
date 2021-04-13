@@ -47,9 +47,7 @@ runSweeperWorker mvar conn =
         threadDelay $ 1000000 * 3600
         `catch` \e ->
             let e' = e :: SomeException
-            in  do
-                print "caught exception, restarting..."
-                print e'
+            in  print $ "Caught exception, restarting: " ++ show e'
 
 main' = do
     cache <- initCache
