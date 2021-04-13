@@ -66,7 +66,7 @@ data DbReq =
 initRedisConnection :: IO Connection
 initRedisConnection = connect $ defaultConnectInfo {
     connectHost ="ec2-54-216-43-206.eu-west-1.compute.amazonaws.com",
-    connectPort = PortNumber 14459,
+    connectPort = PortNumber 27680,
     connectAuth = Just "p17df6aa47fbc3f8dfcbcbfba00334ecece8b39a921ed91d97f6a9eeefd8d1793"
 }
 
