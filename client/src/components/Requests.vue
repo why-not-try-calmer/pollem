@@ -87,19 +87,19 @@
                 </tab>
                 <tab title="Take the poll">
                     <button
-                        v-if="AppMode === 'dev' && !pollOnDisplay.startDate"
+                        v-if="AppMode === 'dev' && !displayed.poll_startDate"
                         @click="testChart"
                     >
                         Test chart
                     </button>
-                    <div v-if="pollOnDisplay.startDate" class="mt-10">
-                        <div id="pollOnDisplay" class="flex flex-col">
+                    <div v-if="displayed.poll_startDate" class="mt-10">
+                        <div id="displayed" class="flex flex-col">
                             <div>
                                 <textarea
                                     id="takingQuestion"
                                     rows="2"
                                     cols="30"
-                                    :value="pollOnDisplay.question"
+                                    :value="displayed.poll_question"
                                     disabled
                                 />
                             </div>
@@ -109,7 +109,7 @@
                                 ref="chart"
                                 v-if="
                                     chart.results.length > 0 &&
-                                    pollOnDisplay.visible
+                                    displayed.poll_visible
                                 "
                             />
                             <div>
@@ -117,14 +117,11 @@
                                     id="takingDescription"
                                     rows="3"
                                     cols="45"
-                                    :value="pollOnDisplay.description"
+                                    :value="displayed.poll_description"
                                     disabled
                                 />
                             </div>
-                            <div
-                                v-for="(a, k) in pollOnDisplay.results"
-                                :key="k"
-                            >
+                            <div v-for="(a, k) in displayed.poll_results" :key="k">
                                 <div>
                                     <label>{{ a.text }}</label>
                                     <input
@@ -143,7 +140,7 @@
                                     class="mx-3 mr-5"
                                     type="checkbox"
                                     id="takingMultiple"
-                                    :checked="pollOnDisplay.multiple"
+                                    :checked="displayed.poll_multiple"
                                     disabled
                                 />
                                 <label for="takingVisible"
@@ -153,7 +150,7 @@
                                     class="mx-3 mr-5"
                                     type="checkbox"
                                     id="takingVisible"
-                                    :checked="pollOnDisplay.visible"
+                                    :checked="displayed.poll_visible"
                                     disabled
                                 />
                             </div>
@@ -164,17 +161,17 @@
                                 <input
                                     type="text"
                                     id="takingStartDate"
-                                    :value="pollOnDisplay.startDate"
+                                    :value="displayed.poll_startDate"
                                     disabled
                                 />
-                                <div v-if="pollOnDisplay.endDate">
+                                <div v-if="displayed.poll_endDate">
                                     <label class="space-y-3" for="takingEndDate"
                                         >(optional) Poll due to close at:</label
                                     >
                                     <input
                                         type="text"
                                         id="takingEndDate"
-                                        :value="pollOnDisplay.endDate"
+                                        :value="displayed.poll_endDate"
                                         disabled
                                     />
                                 </div>
@@ -466,29 +463,32 @@ const Requests = {
             ],
         },
     },
-    tryRoute(method, route) {
-        if (Object.keys(this.valid_keys[method]).includes(route)) return route;
-        else return null;
-    },
-    makeReq(method, route, payload = null) {
-        const r = this.tryRoute(method, route);
-        if (r === null) throw new Error("Bad endpoint! Request aborted.");
-        const e = this.server_url[this.AppMode];
-        const url = e + "/" + r;
-        // dealing with a GET-warmup request
-        if (route === "warmup")
-            return fetch(url).then((res) => res.json());
-        // dealing with a GET-polls requests
-        if (route === "polls") return fetch(url + '/' + PollId + '?secret=' + PollSecret)
-        // dealing with a POST request
-        if (payload === null) throw new Error ("Empty payload found in " + url + "request.")
-        const missing_keys = this.routes.post[route].filter(
+    validOrError(payload, refKeys) {
+        const missing_keys = refKeys.filter(
             (k) => !Object.keys(payload).includes(k)
         );
         if (missing_keys.length > 0)
             throw new Error(
                 "Missing key(s) from payload: " + JSON.stringify(missing_keys)
             );
+    },
+    tryRoute(method, route) {
+        if (!Object.keys(this.valid_keys[method]).includes(route))
+            throw new Error("Invalid route: " + method + " and route " + route);
+    },
+    makeReq(method, route, payload = null) {
+        this.tryRoute(method, route);
+        const host = this.server_url[this.AppMode];
+        const url = host + "/" + route;
+        // dealing with a GET-warmup request
+        if (route === "warmup") return fetch(url).then((res) => res.json());
+        // dealing with a GET-polls requests
+        if (route === "polls")
+            return fetch(url + "/" + PollId + "?secret=" + PollSecret);
+        // dealing with a POST request
+        if (payload === null)
+            throw new Error("Empty payload found in " + url + "request.");
+        this.tryValidate(payload, this.valid_keys[method].req);
         const config = {
             headers: {
                 "Content-Type": "application/json",
@@ -497,7 +497,12 @@ const Requests = {
             method: "POST",
             body: JSON.stringify(payload),
         };
-        return fetch(url, config).then((res) => res.json());
+        return fetch(url, config)
+            .then((res) => res.json())
+            .then((payload) => {
+                this.tryValidate(payload, this.valid_keys[method].resp);
+                return payload;
+            });
     },
 };
 
@@ -522,7 +527,7 @@ export default {
                 private: false,
                 answers: ["Answer#1", "Answer#2"],
             },
-            pollOnDisplay: {},
+            displayed: {},
             chart: {
                 results: [],
                 options: {},
@@ -540,7 +545,7 @@ export default {
         };
     },
     setup() {
-        // ---------LOADING -------------
+        // --------- Poll id, secret -------------
         const { pollid, secret } = Requests.checkURI(window.location.href);
         let active;
         if (pollid !== null) {
@@ -551,7 +556,7 @@ export default {
         return { active };
     },
     mounted() {
-        // loading fingerprinting library
+        // --------- Fingerprint, storage --------
         FingerprintJS.load()
             .then((fp) => fp.get())
             .then((result) => {
@@ -565,65 +570,47 @@ export default {
                     this.user.fingerprint = result.visitorId;
                 }
                 this.creatingPoll.startDate = new Date();
-                // ------------- END LOADING ------------
+                // ------------- Warming up server ------------
                 // exiting loading if we're are not GET-ing any poll
                 if (PollId === null) {
                     this.$toast.success(Replies.loaded);
                     Requests.makeReq("get", "warmup")
                         .then((res) => res.json())
-                        .then((res) => this.$toast.info(res));
+                        .then((res) => this.$toast.info(res))
+                        .catch((err) => this.$toast.error(err));
                     return;
-                    // otherwise fetching poll passed as parameter
                 }
-                const head =
-                    Requests.server_url[this.AppMode] +
-                    "/polls/" +
-                    PollId.toString();
-                const url =
-                    PollSecret === null ? head : head + "?secret=" + PollSecret;
-                return (
-                    fetch(url)
-                        // error, bubbling up to user
-                        .catch((err) => this.$toast.error(err))
-                        // parsing result
-                        .then((res) => res.json())
-                        // binding results to component's data, displaying, bubbling up confirmation
-                        .then((res) => {
-                            if (!res.resp_get_poll) {
-                                this.$toast.error(
-                                    "Either the poll was not received or could not be decoded, aborting. Unable to carry on."
-                                );
-                                return;
-                            }
-                            const poll = res.resp_get_poll;
-                            this.pollOnDisplay.question = poll.poll_question;
-                            this.pollOnDisplay.startDate = poll.poll_startDate;
-                            this.pollOnDisplay.description =
-                                poll.poll_description;
-                            this.pollOnDisplay.visible = poll.poll_visible;
-                            this.pollOnDisplay.multiple = poll.poll_multiple;
-                            if (poll.poll_endDate !== null)
-                                this.pollOnDisplay.endDate = poll.poll_endDate;
-                            this.pollOnDisplay.answers = poll.poll_answers.map(
+                // otherwise fetching poll passed as parameter
+                //--------------- Binding payload to data ---------------
+                return Requests.makeReq("get", "warmup")
+                    .then((res) => res.json())
+                    .catch((err) => this.$toast.error(err))
+                    .then((res) => {
+                        const poll = res.resp_get_poll;
+                        this.displayed = Object.assign(this.displayed, poll);
+                        if (!poll.poll_endDate)
+                            this.displayed.poll_endDate = null;
+                        if (this.displayed.answers)
+                            this.displayed.answers = poll.poll_answers.map(
                                 (a) => ({
                                     text: a,
                                     value: false,
                                 })
                             );
-                            if (res.resp_get_poll_results) {
-                                this.chart.results = res.resp_get_poll_results.map(
-                                    (d) => parseInt(d)
-                                );
-                                this.setChartOptions();
-                            }
-                            this.$toast.success(
-                                Replies.loaded +
-                                    " Here is your poll. (" +
-                                    res.resp_get_poll_msg +
-                                    ")"
+                        if (res.resp_get_poll_results) {
+                            this.chart.results = res.resp_get_poll_results.map(
+                                (d) => parseInt(d)
                             );
-                        })
-                );
+                            this.setChartOptions();
+                        }
+                        this.$toast.success(
+                            Replies.loaded +
+                                " Here is your poll. (" +
+                                res.resp_get_poll_msg +
+                                ")"
+                        );
+                        this.$toast.info(res);
+                    });
             });
     },
     computed: {
@@ -636,7 +623,7 @@ export default {
             ].every((i) => i !== "");
         },
         chartStyle() {
-            const x = this.pollOnDisplay.answers.length;
+            const x = this.displayed.answers.length;
             return x === 0
                 ? null
                 : "width: 900px; height: " + (75 * x).toString() + "px";
@@ -647,10 +634,9 @@ export default {
     },
     methods: {
         toggleResults(k) {
-            this.pollOnDisplay.results[k].value = !this.pollOnDisplay.results[k]
-                .value;
-            if (!this.pollOnDisplay.multiple)
-                this.pollOnDisplay.results.forEach(
+            this.displayed.results[k].value = !this.displayed.results[k].value;
+            if (!this.displayed.multiple)
+                this.displayed.results.forEach(
                     (item, index) =>
                         (item.value = index === k ? item.value : false)
                 );
@@ -669,12 +655,12 @@ export default {
                 ask_email: this.user.email,
             };
             return Requests.makeReq("post", "ask_token", payload)
-                .catch(err => this.$toast.error(err))
+                .catch((err) => this.$toast.error(err))
                 .then((res) => {
                     this.$toast.success(res.resp_ask_token, {
-                    duration: 10000,
+                        duration: 10000,
+                    });
                 });
-            });
         },
         confirmToken() {
             this.user.token_sent = true;
@@ -684,9 +670,8 @@ export default {
                 confirm_email: this.user.email,
             };
             return Requests.makeReq("post", "confirm_token", payload)
-                .catch(err => this.$toast.error(err))
-                .then(
-                (res) => {
+                .catch((err) => this.$toast.error(err))
+                .then((res) => {
                     if (res.resp_confirm_token && res.resp_confirm_hash) {
                         this.user.token = res.resp_confirm_token;
                         this.user.hash = res.resp_confirm_hash;
@@ -694,8 +679,7 @@ export default {
                     } else {
                         this.$toast.warning(res.resp_confirm_msg);
                     }
-                }
-            );
+                });
         },
         createPoll() {
             let recipe = {
@@ -731,23 +715,23 @@ export default {
             }
             payload.create_recipe = JSON.stringify(recipe);
             return Requests.makeReq("post", "create", payload)
-                .catch(err => this.$toast.error(err))
+                .catch((err) => this.$toast.error(err))
                 .then((res) => {
-                this.$toast.success(res.resp_create_msg);
-                let createdPoll = {
-                    question: this.creatingPoll.question,
-                    startDate: this.creatingPoll.startDate,
-                    link:
-                        "/polls/" +
-                        PollId +
-                        "?secret=" +
-                        res.resp_create_pollid.toString(),
-                    secret: res.resp_create_pollsecret,
-                };
-                if (this.creatingPoll.endDate !== null)
-                    createdPoll.endDate = this.creatingPoll.endDate;
-                this.user.created.push(createdPoll);
-            });
+                    this.$toast.success(res.resp_create_msg);
+                    let createdPoll = {
+                        question: this.creatingPoll.question,
+                        startDate: this.creatingPoll.startDate,
+                        link:
+                            "/polls/" +
+                            PollId +
+                            "?secret=" +
+                            res.resp_create_pollid.toString(),
+                        secret: res.resp_create_pollsecret,
+                    };
+                    if (this.creatingPoll.endDate !== null)
+                        createdPoll.endDate = this.creatingPoll.endDate;
+                    this.user.created.push(createdPoll);
+                });
         },
         closePoll() {
             const payload = {
@@ -756,28 +740,23 @@ export default {
                 close_pollid: PollId,
             };
             return Requests.makeReq("post", "close", payload)
-                .catch(err => this.$toast.error(err))
-                .then((res) =>
-                this.$toast.success(res.resp_close_msg)
-            );
+                .catch((err) => this.$toast.error(err))
+                .then((res) => this.$toast.success(res.resp_close_msg));
         },
         takePoll() {
             const payload = {
                 take_fingerprint: this.user.fingerprint,
                 take_hash: this.user.hash,
                 take_token: this.user.token,
-                take_results: this.pollOnDisplay.answers.map(
+                take_results: this.displayed.answers.map(
                     (r) =>
-                        this.pollOnDisplay.results.find((x) => x.text === r)
-                            .value
+                        this.displayed.results.find((x) => x.text === r).value
                 ),
                 take_pollid: PollId,
             };
             return Requests.makeReq("post", "take", payload)
-                .catch(err => this.$toast.error(err))
-                .then((res) =>
-                this.$toast.success(res.resp_take_msg)
-            );
+                .catch((err) => this.$toast.error(err))
+                .then((res) => this.$toast.success(res.resp_take_msg));
         },
         restoreHistory() {
             const payload = {
@@ -787,30 +766,30 @@ export default {
             this.user.created = [];
             this.user.taken = [];
             return Requests.makeReq("post", "myhistory", payload)
-                .catch(err => this.$toast.error(err))
+                .catch((err) => this.$toast.error(err))
                 .then((res) => {
-                if (res.resp_myhistory !== null) {
-                    this.$toast.success(res.resp_myhistory_msg);
-                    const mypolls = res.resp_myhistory_polls;
-                    const created = res.resp_myhistory_created;
-                    for (let [k, entry] of Object.entries(mypolls)) {
-                        const poll = JSON.parse(entry[2][1]);
-                        const startDate = new Date(poll.poll_startDate);
-                        const secret = entry[1][1];
-                        const excerpt = {
-                            question: poll.poll_question,
-                            link: "/polls/" + k + "?secret=" + secret,
-                            startDate,
-                            secret,
-                        };
-                        if (poll.poll_endDate !== null)
-                            excerpt.endDate = new Date(poll.poll_endDate);
-                        if (created.includes(k))
-                            this.user.created.push(excerpt);
-                        else this.user.taken.push(excerpt);
-                    }
-                } else this.$toast.error(res.resp_myhistory_msg);
-            });
+                    if (res.resp_myhistory !== null) {
+                        this.$toast.success(res.resp_myhistory_msg);
+                        const mypolls = res.resp_myhistory_polls;
+                        const created = res.resp_myhistory_created;
+                        for (let [k, entry] of Object.entries(mypolls)) {
+                            const poll = JSON.parse(entry[2][1]);
+                            const startDate = new Date(poll.poll_startDate);
+                            const secret = entry[1][1];
+                            const excerpt = {
+                                question: poll.poll_question,
+                                link: "/polls/" + k + "?secret=" + secret,
+                                startDate,
+                                secret,
+                            };
+                            if (poll.poll_endDate !== null)
+                                excerpt.endDate = new Date(poll.poll_endDate);
+                            if (created.includes(k))
+                                this.user.created.push(excerpt);
+                            else this.user.taken.push(excerpt);
+                        }
+                    } else this.$toast.error(res.resp_myhistory_msg);
+                });
         },
         logout() {
             this.user = {
