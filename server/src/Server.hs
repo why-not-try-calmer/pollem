@@ -9,12 +9,12 @@ module Server
     , app
     ) where
 
-import Cryptog
 import           Control.Concurrent          (modifyMVar_, putMVar, readMVar,
                                               takeMVar, threadDelay)
 import           Control.Monad.Except        (ExceptT, runExceptT)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Reader
+import           Cryptog
 import           Data.Aeson                  (ToJSON (toEncoding), encode,
                                               fromEncoding, fromJSON, toJSON)
 import           Data.Aeson.Extra            (encodeStrict)
@@ -24,16 +24,17 @@ import           Data.Maybe                  (fromMaybe)
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
 import           Database
-import           Database.Redis              (Connection, PortID (PortNumber), runRedis, info, disconnect)
+import           Database.Redis              (Connection, PortID (PortNumber),
+                                              disconnect, info, runRedis)
 import qualified ErrorsReplies               as R
 import           HandlersDataTypes
 import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
-import           Times                   (fresherThan, getNow, isoOrCustom)
 import           Servant
 import           System.Environment          (getEnvironment)
+import           Times                       (fresherThan, getNow, isoOrCustom)
 import           Worker
 
 type API =
@@ -225,7 +226,7 @@ startApp = do
     {- initializing connection to database, cache -}
     state <- initState
     cache <- initCache
-    connector <- initRedisConnection connInfo 
+    connector <- initRedisConnection connInfo
     {- setting up config -}
     let config = Config initSendgridConfig connector state cache
     {- running -}

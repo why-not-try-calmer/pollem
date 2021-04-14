@@ -390,46 +390,11 @@ const Storage = {
 };
 
 const Requests = {
-    endpoints: {
+    server_url: {
         dev: "http://localhost:8009",
         prod: "https://pollem-now.herokuapp.com",
     },
-    client: {
-        dev: "http://localhost:8080",
-        prod: "https://hardcore-hopper-66afd6.netlify.app/",
-    },
-    routes: {
-        post: {
-            ask_token: ["ask_email"],
-            close: ["close_hash", "close_token", "close_pollid"],
-            confirm_token: [
-                "confirm_token",
-                "confirm_fingerprint",
-                "confirm_email",
-            ],
-            create: [
-                "create_hash",
-                "create_token",
-                "create_recipe",
-                "create_startDate",
-                "create_recipe",
-            ],
-            myhistory: ["myhistory_hash", "myhistory_token"],
-            take: [
-                "take_fingerprint",
-                "take_hash",
-                "take_token",
-                "take_results",
-            ],
-        },
-        get: ["polls", "warmup"],
-    },
-    tryRoute(method, route) {
-        if (Object.keys(this.routes[method]).includes(route))
-            return "/" + route;
-        else return null;
-    },
-    ascertain(uri) {
+    checkURI(uri) {
         const s = uri.split("/"),
             g = s[3],
             mb_param = s[4];
@@ -448,6 +413,91 @@ const Requests = {
             pollid: mb_param,
             secret: null,
         };
+    },
+    valid_keys: {
+        post: {
+            ask_token: {
+                req: ["ask_email"],
+                resp: [
+                    "resp_confirm_msg",
+                    "resp_confirm_hash",
+                    "resp_confirm_token",
+                ],
+            },
+            close: {
+                req: ["close_hash", "close_token", "close_pollid"],
+                resp: ["resp_close_msg"],
+            },
+            confirm_token: {
+                req: ["confirm_token", "confirm_fingerprint", "confirm_email"],
+                resp: [],
+            },
+            create: {
+                req: [
+                    "create_hash",
+                    "create_token",
+                    "create_recipe",
+                    "create_startDate",
+                    "create_recipe",
+                ],
+                resp: [
+                    "resp_create_msg",
+                    "resp_create_pollid",
+                    "resp_create_pollsecret",
+                ],
+            },
+            myhistory: { req: ["myhistory_hash", "myhistory_token"], resp: [] },
+            take: {
+                req: [
+                    "take_fingerprint",
+                    "take_hash",
+                    "take_token",
+                    "take_results",
+                ],
+                resp: ["resp_take_msg"],
+            },
+        },
+        get: {
+            req: ["polls", "warmup"],
+            resp: [
+                "resp_get_poll_msg",
+                "resp_get_poll",
+                "resp_get_poll_results",
+            ],
+        },
+    },
+    tryRoute(method, route) {
+        if (Object.keys(this.valid_keys[method]).includes(route)) return route;
+        else return null;
+    },
+    makeReq(method, route, payload = null) {
+        const r = this.tryRoute(method, route);
+        if (r === null) throw new Error("Bad endpoint! Request aborted.");
+        const e = this.server_url[this.AppMode];
+        const url = e + "/" + r;
+        // dealing with a GET-warmup request
+        if (route === "warmup")
+            return fetch(url).then((res) => res.json());
+        // dealing with a GET-polls requests
+        if (route === "polls") return fetch(url + '/' + PollId + '?secret=' + PollSecret)
+        // dealing with a POST request
+        if (payload === null) throw new Error ("Empty payload found in " + url + "request.")
+        const missing_keys = this.routes.post[route].filter(
+            (k) => !Object.keys(payload).includes(k)
+        );
+        if (missing_keys.length > 0)
+            throw new Error(
+                "Missing key(s) from payload: " + JSON.stringify(missing_keys)
+            );
+        const config = {
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+            },
+            method: "POST",
+            body: JSON.stringify(payload),
+        };
+        return fetch(url, config).then((res) => res.json());
     },
 };
 
@@ -491,7 +541,7 @@ export default {
     },
     setup() {
         // ---------LOADING -------------
-        const { pollid, secret } = Requests.ascertain(window.location.href);
+        const { pollid, secret } = Requests.checkURI(window.location.href);
         let active;
         if (pollid !== null) {
             PollId = parseInt(pollid);
@@ -519,14 +569,14 @@ export default {
                 // exiting loading if we're are not GET-ing any poll
                 if (PollId === null) {
                     this.$toast.success(Replies.loaded);
-                    fetch(Requests.endpoints[this.AppMode] + "/warmup")
+                    Requests.makeReq("get", "warmup")
                         .then((res) => res.json())
                         .then((res) => this.$toast.info(res));
                     return;
                     // otherwise fetching poll passed as parameter
                 }
                 const head =
-                    Requests.endpoints[this.AppMode] +
+                    Requests.server_url[this.AppMode] +
                     "/polls/" +
                     PollId.toString();
                 const url =
@@ -613,49 +663,15 @@ export default {
             this.creatingPoll.answers.pop();
         },
         // ----------- REQUESTS --------------
-        makeReq(method, route, payload) {
-            const e = Requests.endpoints[this.AppMode];
-            const r = Requests.tryRoute(method, route);
-            if (r === null) {
-                this.$toast.error("Bad endpoint! Request aborted.");
-                return;
-            }
-            const url = e + r;
-            if (Requests.routes.get.includes(route)) {
-                return fetch(url)
-                    .catch((err) => this.$toast.error(err))
-                    .then((res) => res.json());
-            } else {
-                const missing_keys = Requests.routes.post[route].filter(
-                    (k) => !Object.keys(payload).includes(k)
-                );
-                if (missing_keys.length > 0) {
-                    this.$toast.error(
-                        "Missing key(s) from payload: " +
-                            JSON.stringify(missing_keys)
-                    );
-                    return;
-                }
-                const config = {
-                    headers: {
-                        "Content-Type": "application/json",
-                        Accept: "application/json",
-                    },
-                    method: "POST",
-                    body: JSON.stringify(payload),
-                };
-                return fetch(url, config)
-                    .catch((err) => this.$toast.error(err))
-                    .then((res) => res.json());
-            }
-        },
         askToken() {
             this.user.token_asked = true;
             const payload = {
                 ask_email: this.user.email,
             };
-            return this.makeReq("post", "ask_token", payload).then((res) => {
-                this.$toast.success(res.resp_ask_token, {
+            return Requests.makeReq("post", "ask_token", payload)
+                .catch(err => this.$toast.error(err))
+                .then((res) => {
+                    this.$toast.success(res.resp_ask_token, {
                     duration: 10000,
                 });
             });
@@ -667,7 +683,9 @@ export default {
                 confirm_fingerprint: this.user.fingerprint,
                 confirm_email: this.user.email,
             };
-            return this.makeReq("post", "confirm_token", payload).then(
+            return Requests.makeReq("post", "confirm_token", payload)
+                .catch(err => this.$toast.error(err))
+                .then(
                 (res) => {
                     if (res.resp_confirm_token && res.resp_confirm_hash) {
                         this.user.token = res.resp_confirm_token;
@@ -712,7 +730,9 @@ export default {
                 return;
             }
             payload.create_recipe = JSON.stringify(recipe);
-            return this.makeReq("post", "create", payload).then((res) => {
+            return Requests.makeReq("post", "create", payload)
+                .catch(err => this.$toast.error(err))
+                .then((res) => {
                 this.$toast.success(res.resp_create_msg);
                 let createdPoll = {
                     question: this.creatingPoll.question,
@@ -735,7 +755,9 @@ export default {
                 close_token: this.user.token,
                 close_pollid: PollId,
             };
-            return this.makeReq("post", "close", payload).then((res) =>
+            return Requests.makeReq("post", "close", payload)
+                .catch(err => this.$toast.error(err))
+                .then((res) =>
                 this.$toast.success(res.resp_close_msg)
             );
         },
@@ -751,7 +773,9 @@ export default {
                 ),
                 take_pollid: PollId,
             };
-            return this.makeReq("post", "take", payload).then((res) =>
+            return Requests.makeReq("post", "take", payload)
+                .catch(err => this.$toast.error(err))
+                .then((res) =>
                 this.$toast.success(res.resp_take_msg)
             );
         },
@@ -762,7 +786,9 @@ export default {
             };
             this.user.created = [];
             this.user.taken = [];
-            return this.makeReq("post", "myhistory", payload).then((res) => {
+            return Requests.makeReq("post", "myhistory", payload)
+                .catch(err => this.$toast.error(err))
+                .then((res) => {
                 if (res.resp_myhistory !== null) {
                     this.$toast.success(res.resp_myhistory_msg);
                     const mypolls = res.resp_myhistory_polls;
