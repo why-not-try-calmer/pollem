@@ -714,7 +714,7 @@ export default {
                     startDate: this.creatingPoll.startDate,
                     link:
                         Requests.endpoints[this.AppMode] +
-                        "/get/" +
+                        "/" +
                         PollId +
                         "?secret=" +
                         res.resp_create_pollid.toString(),
@@ -773,7 +773,7 @@ export default {
                             question: poll.poll_question,
                             link:
                                 Requests.endpoints[this.AppMode] +
-                                "/get/" + k + "?secret=" +  secret,
+                                "/" + k + "?secret=" +  secret,
                             startDate,
                             secret,
                         };
