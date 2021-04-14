@@ -108,7 +108,7 @@
                                 :style="chartStyle"
                                 ref="chart"
                                 v-if="
-                                    chart.results.length > 0 &&
+                                    chart.scores.length > 0 &&
                                     displayed.poll_visible
                                 "
                             />
@@ -121,7 +121,10 @@
                                     disabled
                                 />
                             </div>
-                            <div v-for="(a, k) in displayed.poll_results" :key="k">
+                            <div
+                                v-for="(a, k) in displayed.poll_results"
+                                :key="k"
+                            >
                                 <div>
                                     <label>{{ a.text }}</label>
                                     <input
@@ -415,11 +418,7 @@ const Requests = {
         post: {
             ask_token: {
                 req: ["ask_email"],
-                resp: [
-                    "resp_confirm_msg",
-                    "resp_confirm_hash",
-                    "resp_confirm_token",
-                ],
+                resp: ["resp_ask_token"],
             },
             close: {
                 req: ["close_hash", "close_token", "close_pollid"],
@@ -427,7 +426,11 @@ const Requests = {
             },
             confirm_token: {
                 req: ["confirm_token", "confirm_fingerprint", "confirm_email"],
-                resp: [],
+                resp: [
+                    "resp_confirm_msg",
+                    "resp_confirm_token",
+                    "resp_confirm_hash",
+                ],
             },
             create: {
                 req: [
@@ -459,7 +462,7 @@ const Requests = {
             resp: [
                 "resp_get_poll_msg",
                 "resp_get_poll",
-                "resp_get_poll_results",
+                "resp_get_poll_scores",
             ],
         },
     },
@@ -529,7 +532,7 @@ export default {
             },
             displayed: {},
             chart: {
-                results: [],
+                scores: [],
                 options: {},
             },
             user: {
@@ -582,7 +585,7 @@ export default {
                 }
                 // otherwise fetching poll passed as parameter
                 //--------------- Binding payload to data ---------------
-                return Requests.makeReq("get", "warmup")
+                return Requests.makeReq("get", "polls")
                     .then((res) => res.json())
                     .catch((err) => this.$toast.error(err))
                     .then((res) => {
@@ -597,8 +600,8 @@ export default {
                                     value: false,
                                 })
                             );
-                        if (res.resp_get_poll_results) {
-                            this.chart.results = res.resp_get_poll_results.map(
+                        if (res.resp_get_poll_scores) {
+                            this.chart.scores = res.resp_get_poll_scores.map(
                                 (d) => parseInt(d)
                             );
                             this.setChartOptions();
@@ -609,7 +612,6 @@ export default {
                                 res.resp_get_poll_msg +
                                 ")"
                         );
-                        this.$toast.info(res);
                     });
             });
     },
@@ -634,9 +636,11 @@ export default {
     },
     methods: {
         toggleResults(k) {
-            this.displayed.results[k].value = !this.displayed.results[k].value;
-            if (!this.displayed.multiple)
-                this.displayed.results.forEach(
+            this.displayed.poll_results[k].value = !this.displayed.poll_results[
+                k
+            ].value;
+            if (!this.displayed.poll_multiple)
+                this.displayed.poll_results.forEach(
                     (item, index) =>
                         (item.value = index === k ? item.value : false)
                 );
@@ -648,7 +652,6 @@ export default {
         removeAnswer() {
             this.creatingPoll.answers.pop();
         },
-        // ----------- REQUESTS --------------
         askToken() {
             this.user.token_asked = true;
             const payload = {
@@ -750,7 +753,8 @@ export default {
                 take_token: this.user.token,
                 take_results: this.displayed.answers.map(
                     (r) =>
-                        this.displayed.results.find((x) => x.text === r).value
+                        this.displayed.poll_results.find((x) => x.text === r)
+                            .value
                 ),
                 take_pollid: PollId,
             };

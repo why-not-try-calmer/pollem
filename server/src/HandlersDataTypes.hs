@@ -105,7 +105,7 @@ $(deriveJSON defaultOptions ''RespTake)
 data RespGet = RespGet {
     resp_get_poll_msg     :: T.Text ,
     resp_get_poll         :: Maybe Poll,
-    resp_get_poll_results :: Maybe [Int]
+    resp_get_poll_scores :: Maybe [Int]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''RespGet)
 
