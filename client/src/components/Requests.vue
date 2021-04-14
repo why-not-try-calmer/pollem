@@ -1,5 +1,6 @@
 <template>
     <div class="container mb-14 p-8">
+        {{ user }}
         <img
             alt="bees"
             src="../assets/bees_thumb.png"
@@ -121,7 +122,10 @@
                                     disabled
                                 />
                             </div>
-                            <div v-for="(a, k) in pollOnDisplay.results" :key="k">
+                            <div
+                                v-for="(a, k) in pollOnDisplay.results"
+                                :key="k"
+                            >
                                 <div>
                                     <label>{{ a.text }}</label>
                                     <input
@@ -326,23 +330,23 @@
                             />
                             <a :href="t.link" target="_blank">Go to poll</a>
                         </div>
-                        <div class="mt-5">
-                            <p class="text-sm font-light">
-                                You've taken or created polls you think should
-                                be displayed here? You can retrieve your entire
-                                history. Please be considerate in your use of
-                                this feature, as the database is not optimized
-                                for this (expect serious debounce). Also your
-                                last created poll might be missing if you
-                                created it very recently.
-                            </p>
-                            <button
-                                @click="restoreHistory"
-                                class="mt-4 p-1 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
-                            >
-                                Retrieve entire history
-                            </button>
-                        </div>
+                    </div>
+                    <div class="mt-5">
+                        <p class="text-sm font-light">
+                            You've taken or created polls you think should be
+                            displayed here? You can retrieve your entire
+                            history. Please be considerate in your use of this
+                            feature, as the database is not optimized for this
+                            (expect serious debounce). Also your last created
+                            poll might be missing if you created it very
+                            recently.
+                        </p>
+                        <button
+                            @click="restoreHistory"
+                            class="mt-4 p-1 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
+                        >
+                            Retrieve entire history
+                        </button>
                     </div>
                 </tab>
             </tabs>
@@ -392,7 +396,7 @@ const Requests = {
         prod: "https://pollem-now.herokuapp.com",
     },
     client: {
-        dev: "http://localhost:8080",
+        dev: "http://localhost:8009",
         prod: "https://hardcore-hopper-66afd6.netlify.app/",
     },
     routes: {
@@ -527,9 +531,7 @@ export default {
                     "/get/" +
                     PollId.toString();
                 const url =
-                    PollSecret === null
-                        ? head
-                        : head + "?secret=" + PollSecret;
+                    PollSecret === null ? head : head + "?secret=" + PollSecret;
                 return (
                     fetch(url)
                         // error, bubbling up to user
@@ -546,10 +548,12 @@ export default {
                             }
                             const poll = JSON.parse(res.resp_get_poll);
                             this.pollOnDisplay = poll;
-                            this.pollOnDisplay.results = poll.answers.map((a) => ({
-                                text: a,
-                                value: false,
-                            }));
+                            this.pollOnDisplay.results = poll.answers.map(
+                                (a) => ({
+                                    text: a,
+                                    value: false,
+                                })
+                            );
                             if (res.resp_get_poll_results) {
                                 this.chart.results = res.resp_get_poll_results.map(
                                     (d) => parseInt(d)
@@ -659,6 +663,7 @@ export default {
             };
             return this.makeReq("post", "confirm_token", payload).then(
                 (res) => {
+                    console.log(res);
                     if (res.resp_confirm_token && res.resp_confirm_hash) {
                         this.user.token = res.resp_confirm_token;
                         this.user.hash = res.resp_confirm_hash;
@@ -709,7 +714,9 @@ export default {
                     startDate: this.creatingPoll.startDate,
                     link:
                         Requests.endpoints[this.AppMode] +
-                        "/" +
+                        "/get/" +
+                        PollId +
+                        "?secret=" +
                         res.resp_create_pollid.toString(),
                     secret: res.resp_create_pollsecret,
                 };
@@ -735,7 +742,8 @@ export default {
                 take_token: this.user.token,
                 take_results: this.pollOnDisplay.answers.map(
                     (r) =>
-                        this.pollOnDisplay.results.find((x) => x.text === r).value
+                        this.pollOnDisplay.results.find((x) => x.text === r)
+                            .value
                 ),
                 take_pollid: PollId,
             };
@@ -759,17 +767,17 @@ export default {
                     for (let [k, entry] of Object.entries(mypolls)) {
                         const poll = JSON.parse(entry[2][1]);
                         console.log(poll);
-                        const startDate = entry[3][2];
-                        const secret = entry[3][3]
+                        const startDate = new Date(poll.poll_startDate);
+                        const secret = entry[1][1];
                         const excerpt = {
                             question: poll.poll_question,
                             link:
                                 Requests.endpoints[this.AppMode] +
-                                "/get/" +
-                                k.toString(),
+                                "/get/" + k + "?secret=" +  secret,
                             startDate,
-                            secret
+                            secret,
                         };
+                        if (poll.poll_endDate !== null) excerpt.endDate = new Date (poll.poll_endDate);
                         if (created.includes(k))
                             this.user.created.push(excerpt);
                         else this.user.taken.push(excerpt);

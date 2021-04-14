@@ -195,9 +195,7 @@ getPoll (SGet pollid) =
                             in  case M.lookup "recipe" poll_metadata of
                                     Nothing -> borked
                                     Just recipe -> case decodeStrict recipe :: Maybe Poll of
-                                        Nothing -> do
-                                            liftIO . print $ recipe
-                                            borked
+                                        Nothing -> borked
                                         Just poll -> pure . Right $ (poll, Nothing, mb_secret)
                     else let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
                     in  multiExec ( do
@@ -230,9 +228,7 @@ getPoll (SGet pollid) =
 getResults :: Redis (Either (Err T.Text) [(B.ByteString, B.ByteString)])
 getResults = smembers "polls" >>= \case
     Left _ -> dbErr
-    Right ids -> traverse collectEndifExists ids >>= \res -> do
-        liftIO $ print res
-        pure . Right . catMaybes $ res
+    Right ids -> traverse collectEndifExists ids >>= \res -> pure . Right . catMaybes $ res
     where
         collectEndifExists :: B.ByteString -> Redis (Maybe (B.ByteString, B.ByteString))
         collectEndifExists i =
