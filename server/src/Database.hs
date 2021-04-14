@@ -21,6 +21,7 @@ import           ErrorsReplies
 import qualified ErrorsReplies          as R
 import           HandlersDataTypes
 import           Times                  (getNow)
+import Control.Exception (try, SomeException (SomeException))
 --
 
 {-- Requests to db: types --}

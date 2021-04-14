@@ -1,6 +1,5 @@
 <template>
     <div class="container mb-14 p-8">
-        {{ user }}
         <img
             alt="bees"
             src="../assets/bees_thumb.png"
@@ -311,7 +310,7 @@
                                 :value="t.endDate"
                                 disabled
                             />
-                            <a :href="t.link" target="_blank">Go to poll</a>
+                            <a :href="t.link">Go to poll</a>
                         </div>
                         <p v-if="user.taken.length > 0" class="font-bold">
                             Taken
@@ -328,7 +327,7 @@
                                 :value="t.endDate"
                                 disabled
                             />
-                            <a :href="t.link" target="_blank">Go to poll</a>
+                            <a :href="t.link">Go to poll</a>
                         </div>
                     </div>
                     <div class="mt-5">
@@ -396,7 +395,7 @@ const Requests = {
         prod: "https://pollem-now.herokuapp.com",
     },
     client: {
-        dev: "http://localhost:8009",
+        dev: "http://localhost:8080",
         prod: "https://hardcore-hopper-66afd6.netlify.app/",
     },
     routes: {
@@ -546,9 +545,16 @@ export default {
                                 );
                                 return;
                             }
-                            const poll = JSON.parse(res.resp_get_poll);
-                            this.pollOnDisplay = poll;
-                            this.pollOnDisplay.results = poll.answers.map(
+                            const poll = res.resp_get_poll;
+                            this.pollOnDisplay.question = poll.poll_question;
+                            this.pollOnDisplay.startDate = poll.poll_startDate;
+                            this.pollOnDisplay.description =
+                                poll.poll_description;
+                            this.pollOnDisplay.visible = poll.poll_visible;
+                            this.pollOnDisplay.multiple = poll.poll_multiple;
+                            if (poll.poll_endDate !== null)
+                                this.pollOnDisplay.endDate = poll.poll_endDate;
+                            this.pollOnDisplay.answers = poll.poll_answers.map(
                                 (a) => ({
                                     text: a,
                                     value: false,
@@ -663,7 +669,6 @@ export default {
             };
             return this.makeReq("post", "confirm_token", payload).then(
                 (res) => {
-                    console.log(res);
                     if (res.resp_confirm_token && res.resp_confirm_hash) {
                         this.user.token = res.resp_confirm_token;
                         this.user.hash = res.resp_confirm_hash;
@@ -713,14 +718,13 @@ export default {
                     question: this.creatingPoll.question,
                     startDate: this.creatingPoll.startDate,
                     link:
-                        Requests.endpoints[this.AppMode] +
-                        "/" +
+                        "/polls/" +
                         PollId +
                         "?secret=" +
                         res.resp_create_pollid.toString(),
                     secret: res.resp_create_pollsecret,
                 };
-                if (this.creatingPoll.endDate)
+                if (this.creatingPoll.endDate !== null)
                     createdPoll.endDate = this.creatingPoll.endDate;
                 this.user.created.push(createdPoll);
             });
@@ -761,23 +765,20 @@ export default {
             return this.makeReq("post", "myhistory", payload).then((res) => {
                 if (res.resp_myhistory !== null) {
                     this.$toast.success(res.resp_myhistory_msg);
-                    console.log("Attempting to decode pol...");
                     const mypolls = res.resp_myhistory_polls;
                     const created = res.resp_myhistory_created;
                     for (let [k, entry] of Object.entries(mypolls)) {
                         const poll = JSON.parse(entry[2][1]);
-                        console.log(poll);
                         const startDate = new Date(poll.poll_startDate);
                         const secret = entry[1][1];
                         const excerpt = {
                             question: poll.poll_question,
-                            link:
-                                Requests.endpoints[this.AppMode] +
-                                "/" + k + "?secret=" +  secret,
+                            link: "/polls/" + k + "?secret=" + secret,
                             startDate,
                             secret,
                         };
-                        if (poll.poll_endDate !== null) excerpt.endDate = new Date (poll.poll_endDate);
+                        if (poll.poll_endDate !== null)
+                            excerpt.endDate = new Date(poll.poll_endDate);
                         if (created.includes(k))
                             this.user.created.push(excerpt);
                         else this.user.taken.push(excerpt);

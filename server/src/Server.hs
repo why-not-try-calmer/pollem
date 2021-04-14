@@ -24,7 +24,7 @@ import           Data.Maybe                  (fromMaybe)
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
 import           Database
-import           Database.Redis              (Connection, PortID (PortNumber), runRedis, info)
+import           Database.Redis              (Connection, PortID (PortNumber), runRedis, info, disconnect)
 import qualified ErrorsReplies               as R
 import           HandlersDataTypes
 import           Mailer
@@ -225,7 +225,7 @@ startApp = do
     {- initializing connection to database, cache -}
     state <- initState
     cache <- initCache
-    connector <- initRedisConnection connInfo
+    connector <- initRedisConnection connInfo 
     {- setting up config -}
     let config = Config initSendgridConfig connector state cache
     {- running -}
