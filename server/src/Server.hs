@@ -57,12 +57,13 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
             let email_b = encodeUtf8 email
             env <- ask
             let mvar = pollmanager env
-                hashed = B.init . B.tail . encodeStrict . hashEmail $ email_b
+                hashed = toCleanB . hashEmail $ email_b
                 asksubmit token = SAsk hashed token
             res <- liftIO $ do
                 (n, gen) <- takeMVar mvar
-                token <- createToken gen email_b
-                let token_b = B.init . B.tail . encodeStrict $ token
+                now <- getNow
+                token <- createToken gen (toCleanB . show $ now)
+                let token_b = toCleanB token
                 putMVar mvar (n, gen)
                 sendEmail (makeSendGridEmail (sendgridconf env) token_b email_b) >>= \case
                     Right _ -> connDo (redisconn env) . submit $ asksubmit token_b
@@ -75,7 +76,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
             let token_b = encodeUtf8 token
                 email_b = encodeUtf8 email
                 fingerprint_b = encodeUtf8 fingerprint
-                hashed = B.init . B.tail . encodeStrict . hashEmail $ email_b
+                hashed = toCleanB . hashEmail $ email_b
             let confirmsubmit = SConfirm token_b fingerprint_b hashed
             env <- ask
             liftIO (connDo (redisconn env) . submit $ confirmsubmit) >>= \case
@@ -101,7 +102,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                             (n,g) <- takeManager
                             secret <- createToken g $ encodeUtf8 startDate
                             putMVar (pollmanager env) (n,g)
-                            pure . B.init . B.tail . encodeStrict $ secret
+                            pure . toCleanB $ secret
                     in  do
                         secret <- produceSecret
                         case isoOrCustom . T.unpack $ startDate of

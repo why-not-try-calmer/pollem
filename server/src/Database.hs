@@ -79,6 +79,8 @@ connDo = runRedis
 _connDo :: Connection  -> Redis a -> IO ()
 _connDo conn = void . connDo conn
 
+toCleanB :: String -> B.ByteString
+toCleanB = B.init . B.tail . encodeStrict
 dbErr = pure . Left . R.Err Database $ mempty
 borked = pure . Left . R.Err BorkedData $ mempty
 noUser = pure . Left . R.Err UserNotExist $ mempty
