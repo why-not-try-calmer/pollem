@@ -41,7 +41,7 @@ type API =
     "confirm_token" :> ReqBody '[JSON] ReqConfirmToken :> Post '[JSON] RespConfirmToken :<|>
     "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespCreate :<|>
     -- "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
-    "get" :> Capture "poll_id" Int :> QueryParam "secret" String :> Get '[JSON] RespGet :<|>
+    "polls" :> Capture "id" Int :> QueryParam "secret" String :> Get '[JSON] RespGet :<|>
     "myhistory" :> ReqBody '[JSON] ReqMyHistory :> Post '[JSON] RespMyHistory :<|>
     "take" :> ReqBody '[JSON] ReqTake :> Post '[JSON] RespTake :<|>
     "warmup" :> Get '[JSON] RespWarmup

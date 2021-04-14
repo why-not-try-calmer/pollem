@@ -423,7 +423,7 @@ const Requests = {
                 "take_results",
             ],
         },
-        get: ["get", "warmup"],
+        get: ["polls", "warmup"],
     },
     tryRoute(method, route) {
         if (Object.keys(this.routes[method]).includes(route))
@@ -434,7 +434,7 @@ const Requests = {
         const s = uri.split("/"),
             g = s[3],
             mb_param = s[4];
-        if (g !== "get") return { secret: null, pollid: null };
+        if (g !== "polls") return { secret: null, pollid: null };
         if (mb_param.includes("secret")) {
             const head = mb_param.split("?"),
                 body = head[1],
@@ -528,7 +528,7 @@ export default {
                 }
                 const head =
                     Requests.endpoints[this.AppMode] +
-                    "/get/" +
+                    "/polls/" +
                     PollId.toString();
                 const url =
                     PollSecret === null ? head : head + "?secret=" + PollSecret;
