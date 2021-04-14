@@ -224,7 +224,7 @@ startApp = do
     {- initializing connection to database, cache -}
     state <- initState
     cache <- initCache
-    connector <- initRedisConnection
+    connector <- initRedisConnection connInfo
     {- setting up config -}
     let config = Config initSendgridConfig connector state cache
     {- running -}

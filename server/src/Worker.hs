@@ -29,7 +29,6 @@ sweeperWorker conn mvar = do
                 collectedActiveOutdated = foldr accOutdated [] pollidDate
             {- disable every poll whose endDate is in the past -}
             in  disablePolls collectedActiveOutdated
-    print "Got results."
     case res of
         Left err  -> print . R.renderError $ err
         Right msg -> print . R.renderOk $ msg
