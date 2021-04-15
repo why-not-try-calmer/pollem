@@ -395,6 +395,7 @@ const Requests = {
         prod: "https://pollem-now.herokuapp.com",
     },
     checkURI(s) {
+        if (!s.includes('#')) return { pollid: null, secret: null };
         const _s = s.split("#")[1].split("/")[2];
         if (_s.includes("?")) return { pollid: _s.split("?")[0], secret: _s.split("=")[1] };
         return { pollid: _s.split("?")[0], secret: null };
