@@ -86,12 +86,6 @@
                     </div>
                 </tab>
                 <tab title="Take the poll">
-                    <button
-                        v-if="AppMode === 'dev' && !displayed.poll_startDate"
-                        @click="testChart"
-                    >
-                        Test chart
-                    </button>
                     <div v-if="displayed.poll_startDate" class="mt-10">
                         <div id="displayed" class="flex flex-col">
                             <div>
@@ -181,15 +175,7 @@
                             </div>
                         </div>
                         <button
-                            v-if="AppMode === 'prod'"
                             @click="takePoll"
-                            class="my-5 w-1/3 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
-                        >
-                            Take the poll
-                        </button>
-                        <button
-                            v-else
-                            @click="testSubmitPoll"
                             class="my-5 w-1/3 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                         >
                             Take the poll
@@ -303,7 +289,9 @@
                             :key="k"
                             class="grid grid-cols-3 gap-1"
                         >
-                            <a :href="'#' + t.link">{{ t.question }}</a>
+                            <a href="#" @click="getToggle(t.pollid)">
+                                {{ t.question }}
+                            </a>
                             <input :value="t.startDate" disabled />
                             <input
                                 :value="t.endDate || 'No end date.'"
@@ -325,7 +313,9 @@
                                 :value="t.endDate"
                                 disabled
                             />
-                            <a :href="'#' + t.link">Go to poll</a>
+                            <a href="#" @click="getToggle(t.pollid)">{{
+                                t.question
+                            }}</a>
                         </div>
                     </div>
                     <div class="mt-5">
@@ -395,9 +385,10 @@ const Requests = {
         prod: "https://pollem-now.herokuapp.com",
     },
     checkURI(s) {
-        if (!s.includes('#')) return { pollid: null, secret: null };
+        if (!s.includes("#")) return { pollid: null, secret: null };
         const _s = s.split("#")[1].split("/")[2];
-        if (_s.includes("?")) return { pollid: _s.split("?")[0], secret: _s.split("=")[1] };
+        if (_s.includes("?"))
+            return { pollid: _s.split("?")[0], secret: _s.split("=")[1] };
         return { pollid: _s.split("?")[0], secret: null };
     },
     valid_keys: {
@@ -477,7 +468,7 @@ const Requests = {
             url = url + "/" + PollId + "?secret=" + PollSecret;
         // dealing with a GET-warmup request
         if (method === "get")
-            return fetch(url, config)
+            return fetch(url)
                 .then((res) => res.json())
                 .then((res) => {
                     this.tryPayload(res, this.valid_keys[method][route].resp);
@@ -626,6 +617,28 @@ export default {
         },
     },
     methods: {
+        getToggle(pollid) {
+            
+            return fetch(Requests.server_url[AppMode] + '/polls/' + pollid)
+                .then((res) => res.json())
+                .then((res) => {
+                    const poll = res.resp_get_poll;
+                    this.displayed = Object.assign(this.displayed, poll);
+                    if (!poll.poll_endDate) this.displayed.poll_endDate = null;
+                    if (this.displayed.answers)
+                        this.displayed.answers = poll.poll_answers.map((a) => ({
+                            text: a,
+                            value: false,
+                        }));
+                    if (res.resp_get_poll_scores) {
+                        this.chart.scores = res.resp_get_poll_scores.map((d) =>
+                            parseInt(d)
+                        );
+                        this.setChartOptions();
+                    }
+                    this.active = 1;
+                });
+        },
         toggleResults(k) {
             this.displayed.poll_results[k].value = !this.displayed.poll_results[
                 k
@@ -715,12 +728,8 @@ export default {
                     let createdPoll = {
                         question: this.creatingPoll.question,
                         startDate: this.creatingPoll.startDate,
-                        link:
-                            "/polls/" +
-                            PollId +
-                            "?secret=" +
-                            res.resp_create_pollid.toString(),
                         secret: res.resp_create_pollsecret,
+                        pollid: res.resp_create_pollid,
                     };
                     if (this.creatingPoll.endDate !== null)
                         createdPoll.endDate = this.creatingPoll.endDate;
@@ -773,9 +782,9 @@ export default {
                             const secret = entry[1][1];
                             const excerpt = {
                                 question: poll.poll_question,
-                                link: "/polls/" + k + "?secret=" + secret,
                                 startDate,
                                 secret,
+                                pollid: k,
                             };
                             if (poll.poll_endDate !== null)
                                 excerpt.endDate = new Date(poll.poll_endDate);
