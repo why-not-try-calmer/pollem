@@ -151,7 +151,7 @@ submit (SClose hash token pollid) =
             pure $ (,) <$> polldata <*> userdata
         ) >>= \case
             TxSuccess (pdata, udata) ->
-                if missingFrom [("active","true"), ("<", token)] pdata then pure . Left . R.Err Custom
+                if missingFrom [("active","true"), ("author_hash", hash)] pdata then pure . Left . R.Err Custom
                     $ "Either the poll was closed already, or you don't have closing rights." else
                 if missingFrom [("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ mempty
                 else do
@@ -169,15 +169,15 @@ submit (STake hash token finger pollid answers) =
             ismemberF <- sismember hash ("participants_fingerprints:" `B.append` finger)
             pure $ (,,,) <$> polldata <*> userdata <*> ismemberH <*> ismemberF
         ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
-                        if missingFrom [("active","true")] pdata  then pure . Left . R.Err PollInactive $ pollid_txt else
+                        if missingFrom [("active","true")] pdata then pure . Left . R.Err PollInactive $ pollid_txt else
                         if missingFrom [("token", token),("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ decodeUtf8 hash else
-                        if isF || isH then pure . Left . R.Err PollTakenAlready $ pollid_txt
-                        else multiExec ( do
+                        if isF || isH then pure . Left . R.Err PollTakenAlready $ pollid_txt else 
+                            multiExec ( do
                             sadd ("participants_hashes:" `B.append` pollid) [hash]
                             sadd ("participants_fingerprints:" `B.append` pollid) [finger]
                             lpush ("answers:" `B.append` pollid `B.append` ":" `B.append` hash) answers
-                        ) >>= \case TxSuccess _ -> pure . Right . R.Ok $ "Answers submitted successfully!"
-                                    _  -> pure . Left . R.Err Database $ "Database error"
+                            ) >>= \case TxSuccess _ -> pure . Right . R.Ok $ "Answers submitted successfully!"
+                                        _  -> pure . Left . R.Err Database $ "Database error"
                     _   -> pure . Left . R.Err Database $ "User or poll data missingFrom."
 
 getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Maybe [Int], Maybe B.ByteString  ))

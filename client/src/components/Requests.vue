@@ -289,7 +289,7 @@
                             :key="k"
                             class="grid grid-cols-3 gap-1"
                         >
-                            <a href="#" @click="getToggle(t.pollid)">
+                            <a href="#" @click="switchToRestored(t.pollid)">
                                 {{ t.question }}
                             </a>
                             <input :value="t.startDate" disabled />
@@ -313,7 +313,7 @@
                                 :value="t.endDate"
                                 disabled
                             />
-                            <a href="#" @click="getToggle(t.pollid)">{{
+                            <a href="#" @click="switchToRestored(t.pollid)">{{
                                 t.question
                             }}</a>
                         </div>
@@ -385,7 +385,7 @@ const Requests = {
         prod: "https://pollem-now.herokuapp.com",
     },
     checkURI(s) {
-        if (!s.includes("#")) return { pollid: null, secret: null };
+        if (!s.includes("polls")) return { pollid: null, secret: null };
         const _s = s.split("#")[1].split("/")[2];
         if (_s.includes("?"))
             return { pollid: _s.split("?")[0], secret: _s.split("=")[1] };
@@ -617,25 +617,27 @@ export default {
         },
     },
     methods: {
-        getToggle(pollid) {
-            
-            return fetch(Requests.server_url[AppMode] + '/polls/' + pollid)
+        switchToRestored(pollid) {
+            return fetch(Requests.server_url[AppMode] + "/polls/" + pollid)
                 .then((res) => res.json())
                 .then((res) => {
                     const poll = res.resp_get_poll;
                     this.displayed = Object.assign(this.displayed, poll);
                     if (!poll.poll_endDate) this.displayed.poll_endDate = null;
-                    if (this.displayed.answers)
-                        this.displayed.answers = poll.poll_answers.map((a) => ({
-                            text: a,
-                            value: false,
-                        }));
-                    if (res.resp_get_poll_scores) {
+                    if (this.displayed.poll_answers)
+                        this.displayed.poll_results = poll.poll_answers.map(
+                            (a) => ({
+                                text: a,
+                                value: false,
+                            })
+                        );
+                    if (res.resp_get_poll_scores !== null) {
                         this.chart.scores = res.resp_get_poll_scores.map((d) =>
                             parseInt(d)
                         );
                         this.setChartOptions();
                     }
+                    PollId = pollid;
                     this.active = 1;
                 });
         },
@@ -751,10 +753,10 @@ export default {
                 take_fingerprint: this.user.fingerprint,
                 take_hash: this.user.hash,
                 take_token: this.user.token,
-                take_results: this.displayed.answers.map(
-                    (r) =>
-                        this.displayed.poll_results.find((x) => x.text === r)
-                            .value
+                take_results: this.displayed.poll_answers.map((r) =>
+                    this.displayed.poll_results.find((x) => x.text === r).value
+                        ? 1
+                        : 0
                 ),
                 take_pollid: PollId,
             };
@@ -776,6 +778,7 @@ export default {
                         this.$toast.success(res.resp_myhistory_msg);
                         const mypolls = res.resp_myhistory_polls;
                         const created = res.resp_myhistory_created;
+                        const taken = res.resp_myhistory_taken;
                         for (let [k, entry] of Object.entries(mypolls)) {
                             const poll = JSON.parse(entry[2][1]);
                             const startDate = new Date(poll.poll_startDate);
@@ -790,7 +793,8 @@ export default {
                                 excerpt.endDate = new Date(poll.poll_endDate);
                             if (created.includes(k))
                                 this.user.created.push(excerpt);
-                            else this.user.taken.push(excerpt);
+                            if (taken.includes(k))
+                                this.user.taken.push(excerpt);
                         }
                     } else this.$toast.error(res.resp_myhistory_msg);
                 });

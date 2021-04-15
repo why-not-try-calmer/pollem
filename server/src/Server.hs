@@ -179,7 +179,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
         take (ReqTake hash token finger pollid answers) = do
             env <- ask
             res <- liftIO . connDo (redisconn env) . submit $
-                STake (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeStrict . show $ pollid) (map encodeStrict answers)
+                STake (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeUtf8 pollid) (map encodeStrict answers)
             case res of
                 Left err  -> pure . RespTake . R.renderError $ err
                 Right msg -> pure . RespTake . R.renderOk $ msg
