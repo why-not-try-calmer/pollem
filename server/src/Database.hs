@@ -165,8 +165,8 @@ submit (STake hash token finger pollid answers) =
     in  multiExec ( do
             polldata <- hgetall ("poll:" `B.append` pollid)
             userdata <- hgetall userKey
-            ismemberH <- sismember hash ("participants_hashes:" `B.append` pollid)
-            ismemberF <- sismember hash ("participants_fingerprints:" `B.append` finger)
+            ismemberH <- sismember ("participants_hashes:" `B.append` pollid) hash
+            ismemberF <- sismember ("participants_fingerprints:" `B.append` pollid) hash
             pure $ (,,,) <$> polldata <*> userdata <*> ismemberH <*> ismemberF
         ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
                         if missingFrom [("active","true")] pdata then pure . Left . R.Err PollInactive $ pollid_txt else

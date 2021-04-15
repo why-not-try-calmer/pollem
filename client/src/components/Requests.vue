@@ -1,6 +1,6 @@
 <template>
     <div class="container mb-14 p-8">
-        <img
+        <a href="/"><img
             alt="bees"
             src="../assets/bees_thumb.png"
             style="
@@ -10,7 +10,7 @@
                 margin-left: auto;
                 margin-right: auto;
             "
-        />
+        /></a>
         <p class="mt-8 font-medium font-sans text-2xl">Poll'em</p>
         <p class="font-sans mb-8">
             A simple & hassle-free poll application
@@ -280,42 +280,49 @@
                     </button>
                 </tab>
                 <tab v-if="loggedIn" title="My Polls">
-                    <div v-if="mypolls">
-                        <p v-if="user.created.length > 0" class="font-bold">
-                            Created
-                        </p>
+                    <div v-if="mypolls.length > 0">
                         <div
-                            v-for="(t, k) in user.created"
+                            v-for="(t, k) in mypolls"
                             :key="k"
-                            class="grid grid-cols-3 gap-1"
+                            class="grid grid-cols-5 gap-1"
                         >
-                            <a href="#" @click="switchToRestored(t.pollid)">
-                                {{ t.question }}
-                            </a>
-                            <input :value="t.startDate" disabled />
-                            <input
-                                :value="t.endDate || 'No end date.'"
-                                disabled
-                            />
-                        </div>
-                        <p v-if="user.taken.length > 0" class="font-bold">
-                            Taken
-                        </p>
-                        <div
-                            v-for="(t, k) in user.taken"
-                            :key="k"
-                            class="grid grid-cols-3 gap-1"
-                        >
-                            <input :value="t.question" disabled />
-                            <input :value="t.startDate" disabled />
-                            <input
-                                v-if="t.endDate"
-                                :value="t.endDate"
-                                disabled
-                            />
-                            <a href="#" @click="switchToRestored(t.pollid)">{{
-                                t.question
-                            }}</a>
+                            <div>
+                                <a href="#" @click="switchToRestored(t.pollid)">
+                                    {{ t.question }}
+                                </a>
+                            </div>
+                            <div>
+                                <label :for="poll_created + k">created</label>
+                                <input
+                                    class="ml-3"
+                                    disabled
+                                    :id="poll_created + k"
+                                    type="checkbox"
+                                    :checked="
+                                        user.created.some(
+                                            (c) => c.pollid === t.pollid
+                                        )
+                                    "
+                                />
+                            </div>
+                            <div>
+                                <label :for="poll_taken + k">taken:</label>
+                                <input
+                                    class="ml-3"
+                                    disabled
+                                    :id="poll_taken + k"
+                                    type="checkbox"
+                                    :checked="
+                                        user.taken.some(
+                                            (c) => c.pollid === t.pollid
+                                        )
+                                    "
+                                />
+                            </div>
+                            <div>started: {{ t.startDate }}</div>
+                            <div>
+                                expire on: {{ t.endDate || "No end date" }}
+                            </div>
                         </div>
                     </div>
                     <div class="mt-5">
@@ -613,7 +620,7 @@ export default {
                 : "width: 900px; height: " + (75 * x).toString() + "px";
         },
         mypolls() {
-            return this.user.created.length > 0 || this.user.taken.length > 0;
+            return [...this.user.created, ...this.user.taken];
         },
     },
     methods: {
@@ -640,6 +647,23 @@ export default {
                     PollId = pollid;
                     this.active = 1;
                 });
+        },
+        setChartOptions() {
+            this.chart.options = {
+                yAxis: {
+                    type: "category",
+                    data: this.displayed.poll_answers,
+                },
+                xAxis: {
+                    type: "value",
+                },
+                series: [
+                    {
+                        data: this.displayed.poll_results,
+                        type: "bar",
+                    },
+                ],
+            };
         },
         toggleResults(k) {
             this.displayed.poll_results[k].value = !this.displayed.poll_results[
