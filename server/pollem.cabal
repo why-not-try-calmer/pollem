@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 4b6e674d2de48ac8cfa92c7777e917a36baa203ce3b9d5e4068496f4076b4f19
+-- hash: c289e48a592aec2986cdd9aaa86dbee4236aaa3da0454c9c2f76393458301022
 
 name:           pollem
 version:        0.1.0.0
@@ -25,13 +25,14 @@ source-repository head
 library
   exposed-modules:
       Computations
+      Cryptog
       Database
       ErrorsReplies
       HandlersDataTypes
       Mailer
-      Scheduler
       Server
-      Workers
+      Times
+      Worker
   other-modules:
       Paths_pollem
   hs-source-dirs:

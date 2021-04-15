@@ -3,7 +3,7 @@
 module Computations where
 import           Data.List     (transpose)
 import qualified Data.Text     as T
-import           ErrorsReplies
+import           ErrorsReplies (ErrT (BorkedData))
 import qualified ErrorsReplies as ER
 
 collect :: (Num a, Eq a) => [[a]] -> Either (ER.Err T.Text ) [a]

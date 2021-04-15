@@ -4,7 +4,8 @@
 
 module Database where
 
-import           Computations
+import           Computations           (collect)
+import           Control.Exception      (SomeException (SomeException), try)
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson             (decodeStrict)
@@ -12,7 +13,6 @@ import           Data.Aeson.Extra       (encodeStrict)
 import qualified Data.ByteString        as B
 import           Data.ByteString.Char8  (readInt, unsnoc)
 import qualified Data.HashMap.Strict    as HMS
-import qualified Data.Map               as M
 import           Data.Maybe
 import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
@@ -20,7 +20,7 @@ import           Database.Redis
 import           ErrorsReplies
 import qualified ErrorsReplies          as R
 import           HandlersDataTypes
-import           Scheduler              (getNow)
+import           Times                  (getNow)
 --
 
 {-- Requests to db: types --}
@@ -33,7 +33,8 @@ data DbReq =
         create_poll_id        :: B.ByteString,
         create_poll_recipe    :: B.ByteString,
         create_poll_startDate :: B.ByteString,
-        create_poll_endDate   :: Maybe B.ByteString
+        create_poll_endDate   :: Maybe B.ByteString,
+        create_poll_secret    :: B.ByteString
     } |
     SClose  {
         close_hash    :: B.ByteString,
@@ -49,7 +50,7 @@ data DbReq =
         confirm_fingerprint :: B.ByteString,
         confirm_hash        :: B.ByteString
     } |
-    SAnswer {
+    STake {
         answers_hash        :: B.ByteString,
         answers_token       :: B.ByteString,
         answers_fingerprint :: B.ByteString,
@@ -62,12 +63,15 @@ data DbReq =
 {-- Requests to db: functions --}
 
 --
-initRedisConnection :: IO Connection
-initRedisConnection = connect $ defaultConnectInfo {
-    connectHost ="ec2-108-128-25-66.eu-west-1.compute.amazonaws.com",
-    connectPort = PortNumber 14459,
-    connectAuth = Just "p17df6aa47fbc3f8dfcbcbfba00334ecece8b39a921ed91d97f6a9eeefd8d1793"
+connInfo :: ConnectInfo
+connInfo = defaultConnectInfo {
+    connectHost ="redis-18910.c247.eu-west-1-1.ec2.cloud.redislabs.com",
+    connectPort = PortNumber 18910,
+    connectAuth = Just "PGO5OZQ9M5UFVU2JYfNQUMnnXcMCWtOh"
 }
+
+initRedisConnection :: ConnectInfo -> IO Connection
+initRedisConnection = checkedConnect
 
 connDo :: Connection -> Redis a -> IO a
 connDo = runRedis
@@ -75,6 +79,8 @@ connDo = runRedis
 _connDo :: Connection  -> Redis a -> IO ()
 _connDo conn = void . connDo conn
 
+toCleanB :: String -> B.ByteString
+toCleanB = B.init . B.tail . encodeStrict
 dbErr = pure . Left . R.Err Database $ mempty
 borked = pure . Left . R.Err BorkedData $ mempty
 noUser = pure . Left . R.Err UserNotExist $ mempty
@@ -98,7 +104,7 @@ submit (SAsk hash token) = -- hash + token generated a first time from the handl
                     pure . Right . R.Ok $ "Bear in mind that this email address is registered already. I will send you a verification email nonetheless. You don't need to use it unless you want to re-authenticate your email address."
                 else do
                     hmset key [("token", token),("verified", "false")] -- this structure is not typed! perhaps do it
-                    pure . Right . R.Ok $ "Thanks, please check your email"
+                    pure . Right . R.Ok $ "Thanks, please check your email. Expect between 30s and 5 minutes latency from the email provider."
 submit (SConfirm token fingerprint hash) = -- hash generated from the handler, token sent by the user, which on match with DB proves that the hash is from a confirmed email address.
     let key = "user:" `B.append` hash
     in  exists key >>= \case
@@ -115,14 +121,13 @@ submit (SConfirm token fingerprint hash) = -- hash generated from the handler, t
                             sadd "users" [hash]
                             pure . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
                         else noUser
-submit (SCreate hash token pollid recipe startDate endDate) =
+submit (SCreate hash token pollid recipe startDate mb_endDate secret) =
     let pollid_txt = decodeUtf8 pollid
         key = "user:" `B.append` hash
         payload =
-            let base = [("author_hash", hash),("recipe",recipe),("startDate",startDate),("active","true")]
-            in  case endDate of
-                    Just e  -> ("endDate", e):base
-                    Nothing -> base
+            let base = [("author_hash",hash),("secret",secret),("recipe",recipe),("startDate",startDate),("active","true")]
+                endDate = (\v -> pure ("endDate" :: B.ByteString , v)) =<< mb_endDate
+            in  base ++ catMaybes [endDate]
     in  exists ("poll:" `B.append` pollid) >>= \case
         Left err -> dbErr
         Right verdict ->
@@ -154,7 +159,7 @@ submit (SClose hash token pollid) =
                 pure . Right . R.Ok $ "This poll was closed: " `T.append` pollid_txt
             _ -> pure . Left . R.Err PollNotExist $ pollid_txt
 
-submit (SAnswer hash token finger pollid answers) =
+submit (STake hash token finger pollid answers) =
     let pollid_txt = decodeUtf8 pollid
         userKey = "user:" `B.append` hash
     in  multiExec ( do
@@ -175,7 +180,7 @@ submit (SAnswer hash token finger pollid answers) =
                                     _  -> pure . Left . R.Err Database $ "Database error"
                     _   -> pure . Left . R.Err Database $ "User or poll data missingFrom."
 
-getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Maybe [Int]))
+getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Maybe [Int], Maybe B.ByteString  ))
 getPoll (SGet pollid) =
     let pollid_txt = decodeUtf8 pollid
         key = ("poll:" `B.append` pollid)
@@ -187,14 +192,13 @@ getPoll (SGet pollid) =
                 Right participants ->
                     if null participants then hgetall ("poll:" `B.append` pollid) >>= \case
                         Right poll_raw ->
-                            let poll_metadata = M.fromList poll_raw
-                            in  case M.lookup "recipe" poll_metadata of
+                            let poll_metadata = HMS.fromList poll_raw
+                                mb_secret = HMS.lookup "secret" poll_metadata
+                            in  case HMS.lookup "recipe" poll_metadata of
                                     Nothing -> borked
                                     Just recipe -> case decodeStrict recipe :: Maybe Poll of
-                                        Nothing -> do
-                                            liftIO . print $ recipe
-                                            borked
-                                        Just poll -> pure . Right $ (poll, Nothing)
+                                        Nothing -> borked
+                                        Just poll -> pure . Right $ (poll, Nothing, mb_secret)
                     else let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
                     in  multiExec ( do
                         answers <- collectAnswers
@@ -210,12 +214,12 @@ getPoll (SGet pollid) =
                                 case collect answers of
                                 Left err -> pure . Left $ err
                                 Right collected ->
-                                    let poll_metadata = M.fromList poll_raw
-                                    in  case M.lookup "recipe" poll_metadata of
+                                    let poll_metadata = HMS.fromList poll_raw
+                                    in  case HMS.lookup "recipe" poll_metadata of
                                         Nothing -> borked
                                         Just recipe -> case decodeStrict recipe :: Maybe Poll of
                                             Nothing -> borked
-                                            Just poll -> pure . Right $ (poll, Just $ reverse collected)
+                                            Just poll -> pure . Right $ (poll, Just $ reverse collected, HMS.lookup "secret" poll_metadata)
                             Nothing -> borked
     where   decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
             decodeByteList val acc = traverse (fmap fst . readInt) val : acc
@@ -281,47 +285,3 @@ getMyPollsData hash = getTakenCreated hash >>= \case
             TxError err -> pure . Left . R.Err R.Custom $ T.pack err
     where
         collectPoll i = hgetall ("poll:" `B.append` i)
-
-{- Tests -}
-
---
-tCreateUser :: Redis (Either Reply Status)
-tCreateUser =
-    let token = "23232"
-        hash = "lklsdklsk"
-        fingerprint = "223322"
-    in  hmset ("user:" `B.append` hash) [("fingerprint", fingerprint),("token", token),("verified", "true")]
-
-tCreatePoll :: B.ByteString -> B.ByteString -> Redis (Either (Err T.Text) (Ok T.Text))
-tCreatePoll hash now =
-    let poll = mockPoll
-        pollid = "1"
-        recipe = encodeStrict poll
-        token = "token1"
-        date_now d = encodeStrict . show $ d
-    in  submit $ SCreate hash token pollid recipe now Nothing
-
-tSubmitAnswers :: Redis (Either (Err T.Text) (Ok T.Text))
-tSubmitAnswers =
-    let hash = "lklsdklsk"
-        fingerprint = "223322"
-        pollid = "1"
-        token= "token1"
-        answers = ["0","0","1","1","1"]
-    in submit $ SAnswer hash token fingerprint pollid answers
-
-tGetPoll :: Redis (Either (Err T.Text) (Poll, Maybe [Int]))
-tGetPoll = let pollid = "1" in getPoll . SGet $ pollid
-
-mockSetStageGetPoll :: Connection -> IO ()
-mockSetStageGetPoll conn =
-    let pollid = "1"
-        hash = "testUser"
-        actions now = do
-            tCreateUser
-            tCreatePoll hash now
-            tSubmitAnswers
-            getPoll . SGet $ pollid
-    in  getNow >>= \now -> connDo conn $ actions (encodeStrict . show $ now) >>= \case
-            Left err  -> liftIO . print . renderError $ err
-            Right res -> liftIO . print . show $ res

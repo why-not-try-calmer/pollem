@@ -23,7 +23,7 @@
                         <p>Welcome, {{ user.email }}</p>
                         <button
                             @click="logout"
-                            class="p-1 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
+                            class="mt-2 p-1 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                         >
                             Logout
                         </button>
@@ -46,13 +46,13 @@
                                 <button
                                     v-if="!user.token_asked"
                                     @click="askToken"
-                                    class="p-1 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
+                                    class="ml-2 p-1 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                                 >
                                     Authenticate
                                 </button>
                                 <button
                                     v-else
-                                    class="disabled:opacity-50 p-1 bg-green-500 text-white font-semibold rounded-lg shadow-md"
+                                    class="disabled:opacity-50 ml-2 p-1 bg-green-500 text-white font-semibold rounded-lg shadow-md"
                                     disabled
                                 >
                                     Authenticate
@@ -87,19 +87,19 @@
                 </tab>
                 <tab title="Take the poll">
                     <button
-                        v-if="AppMode === 'dev' && !takingPoll.startDate"
+                        v-if="AppMode === 'dev' && !displayed.poll_startDate"
                         @click="testChart"
                     >
                         Test chart
                     </button>
-                    <div v-if="takingPoll.startDate" class="mt-10">
-                        <div id="takingPoll" class="flex flex-col">
+                    <div v-if="displayed.poll_startDate" class="mt-10">
+                        <div id="displayed" class="flex flex-col">
                             <div>
                                 <textarea
                                     id="takingQuestion"
                                     rows="2"
                                     cols="30"
-                                    :value="takingPoll.question"
+                                    :value="displayed.poll_question"
                                     disabled
                                 />
                             </div>
@@ -108,8 +108,8 @@
                                 :style="chartStyle"
                                 ref="chart"
                                 v-if="
-                                    chart.results.length > 0 &&
-                                    takingPoll.visible
+                                    chart.scores.length > 0 &&
+                                    displayed.poll_visible
                                 "
                             />
                             <div>
@@ -117,11 +117,14 @@
                                     id="takingDescription"
                                     rows="3"
                                     cols="45"
-                                    :value="takingPoll.description"
+                                    :value="displayed.poll_description"
                                     disabled
                                 />
                             </div>
-                            <div v-for="(a, k) in takingPoll.results" :key="k">
+                            <div
+                                v-for="(a, k) in displayed.poll_results"
+                                :key="k"
+                            >
                                 <div>
                                     <label>{{ a.text }}</label>
                                     <input
@@ -140,7 +143,7 @@
                                     class="mx-3 mr-5"
                                     type="checkbox"
                                     id="takingMultiple"
-                                    :checked="takingPoll.multiple"
+                                    :checked="displayed.poll_multiple"
                                     disabled
                                 />
                                 <label for="takingVisible"
@@ -150,7 +153,7 @@
                                     class="mx-3 mr-5"
                                     type="checkbox"
                                     id="takingVisible"
-                                    :checked="takingPoll.visible"
+                                    :checked="displayed.poll_visible"
                                     disabled
                                 />
                             </div>
@@ -161,17 +164,17 @@
                                 <input
                                     type="text"
                                     id="takingStartDate"
-                                    :value="takingPoll.startDate"
+                                    :value="displayed.poll_startDate"
                                     disabled
                                 />
-                                <div v-if="takingPoll.endDate">
+                                <div v-if="displayed.poll_endDate">
                                     <label class="space-y-3" for="takingEndDate"
                                         >(optional) Poll due to close at:</label
                                     >
                                     <input
                                         type="text"
                                         id="takingEndDate"
-                                        :value="takingPoll.endDate"
+                                        :value="displayed.poll_endDate"
                                         disabled
                                     />
                                 </div>
@@ -290,7 +293,7 @@
                         Create the poll
                     </button>
                 </tab>
-                <tab title="My Polls">
+                <tab v-if="loggedIn" title="My Polls">
                     <div v-if="mypolls">
                         <p v-if="user.created.length > 0" class="font-bold">
                             Created
@@ -300,14 +303,9 @@
                             :key="k"
                             class="grid grid-cols-3 gap-1"
                         >
-                            <input :value="t.question" disabled />
+                            <a :href="t.link">{{ t.question }}</a>
                             <input :value="t.startDate" disabled />
-                            <input
-                                v-if="t.endDate"
-                                :value="t.endDate"
-                                disabled
-                            />
-                            <a :href="t.link">Go to poll</a>
+                            <input :value="t.endDate || 'No end date.'" disabled />
                         </div>
                         <p v-if="user.taken.length > 0" class="font-bold">
                             Taken
@@ -327,8 +325,8 @@
                             <a :href="t.link">Go to poll</a>
                         </div>
                     </div>
-                    <div v-else>
-                        <p>
+                    <div class="mt-5">
+                        <p class="text-sm font-light">
                             You've taken or created polls you think should be
                             displayed here? You can retrieve your entire
                             history. Please be considerate in your use of this
@@ -339,7 +337,7 @@
                         </p>
                         <button
                             @click="restoreHistory"
-                            class="p-1 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
+                            class="mt-4 p-1 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                         >
                             Retrieve entire history
                         </button>
@@ -358,7 +356,10 @@ import Tabs from "./Tabs";
 import Tab from "./Tab";
 import { ref } from "vue";
 
+const AppMode = "dev"; // "prod"
+
 let PollId = null;
+let PollSecret = null;
 
 const Replies = {
     noLocalStorage:
@@ -386,41 +387,131 @@ const Storage = {
 };
 
 const Requests = {
-    endpoints: {
+    server_url: {
         dev: "http://localhost:8009",
         prod: "https://pollem-now.herokuapp.com",
     },
-    routes: {
+    checkURI(uri) {
+        const s = uri.split("/"),
+            g = s[3],
+            mb_param = s[4];
+        if (g !== "polls") return { secret: null, pollid: null };
+        if (mb_param.includes("secret")) {
+            const head = mb_param.split("?"),
+                body = head[1],
+                secret = body.split("=")[1],
+                pollid = head[0];
+            return {
+                pollid,
+                secret,
+            };
+        }
+        return {
+            pollid: mb_param,
+            secret: null,
+        };
+    },
+    valid_keys: {
         post: {
-            ask_token: ["ask_email"],
-            close: ["close_hash", "close_token", "close_pollid"],
-            confirm_token: [
-                "confirm_token",
-                "confirm_fingerprint",
-                "confirm_email",
-            ],
-            create: [
-                "poll_startDate",
-                "poll_question",
-                "poll_description",
-                "poll_visible",
-                "poll_multiple",
-                "poll_answers",
-            ],
-            myhistory: ["myhistory_hash", "myhistory_token"],
-            take: [
-                "take_fingerprint",
-                "take_hash",
-                "take_token",
-                "take_results",
-            ],
+            ask_token: {
+                req: ["ask_email"],
+                resp: ["resp_ask_token"],
+            },
+            close: {
+                req: ["close_hash", "close_token", "close_pollid"],
+                resp: ["resp_close_msg"],
+            },
+            confirm_token: {
+                req: ["confirm_token", "confirm_fingerprint", "confirm_email"],
+                resp: [
+                    "resp_confirm_msg",
+                    "resp_confirm_token",
+                    "resp_confirm_hash",
+                ],
+            },
+            create: {
+                req: [
+                    "create_hash",
+                    "create_token",
+                    "create_recipe",
+                    "create_startDate",
+                    "create_recipe",
+                ],
+                resp: [
+                    "resp_create_msg",
+                    "resp_create_pollid",
+                    "resp_create_pollsecret",
+                ],
+            },
+            myhistory: { req: ["myhistory_hash", "myhistory_token"], resp: [] },
+            take: {
+                req: [
+                    "take_fingerprint",
+                    "take_hash",
+                    "take_token",
+                    "take_results",
+                ],
+                resp: ["resp_take_msg"],
+            },
         },
-        get: ["get", "warmup"],
+        get: {
+            polls: {
+                resp: [
+                    "resp_get_poll_msg",
+                    "resp_get_poll",
+                    "resp_get_poll_scores",
+                ],
+            },
+            warmup: {
+                resp: ["resp_warmup_msg"],
+            },
+        },
+    },
+    tryPayload(payload, refKeys) {
+        const missing_keys = refKeys.filter(
+            (k) => !Object.keys(payload).includes(k)
+        );
+        if (missing_keys.length > 0)
+            throw new Error(
+                "Missing key(s) from payload: " + JSON.stringify(missing_keys)
+            );
     },
     tryRoute(method, route) {
-        if (Object.keys(this.routes[method]).some((r) => r === route))
-            return "/" + route;
-        else return null;
+        if (!Object.keys(this.valid_keys[method]).includes(route))
+            throw new Error("Invalid route: " + method + " and route " + route);
+    },
+    makeReq(method, route, payload = null) {
+        this.tryRoute(method, route);
+        const host = this.server_url[AppMode];
+        let url = host + "/" + route;
+        if (route === "polls")
+            url = url + "/" + PollId + "?secret=" + PollSecret;
+        // dealing with a GET-warmup request
+        if (method === "get")
+            return fetch(url, config)
+                .then((res) => res.json())
+                .then((res) => {
+                    this.tryPayload(res, this.valid_keys[method][route].resp);
+                    return res
+                });
+        // dealing with a POST request
+        if (payload === null)
+            throw new Error("Empty payload found in " + url + "request.");
+        this.tryPayload(payload, this.valid_keys[method][route].req);
+        const config = {
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+            },
+            method: "POST",
+            body: JSON.stringify(payload),
+        };
+        return fetch(url, config)
+            .then((res) => res.json())
+            .then((payload) => {
+                this.tryPayload(payload, this.valid_keys[method][route].resp);
+                return payload;
+            });
     },
 };
 
@@ -434,7 +525,6 @@ export default {
     },
     data() {
         return {
-            AppMode: "prod",//"dev", // "prod"
             creatingPoll: {
                 startDate: null,
                 endDate: null,
@@ -442,11 +532,12 @@ export default {
                 description: "description...",
                 multiple: false,
                 visible: false,
+                private: false,
                 answers: ["Answer#1", "Answer#2"],
             },
-            takingPoll: {},
+            displayed: {},
             chart: {
-                results: [],
+                scores: [],
                 options: {},
             },
             user: {
@@ -462,17 +553,18 @@ export default {
         };
     },
     setup() {
-        // ---------LOADING -------------
-        const possible_get = window.location.href.split("/");
+        // --------- Poll id, secret -------------
+        const { pollid, secret } = Requests.checkURI(window.location.href);
         let active;
-        if (possible_get.includes("get")) {
-            PollId = parseInt(possible_get.pop());
+        if (pollid !== null) {
+            PollId = parseInt(pollid);
+            PollSecret = secret;
             active = ref(1);
         } else active = ref(0);
         return { active };
     },
     mounted() {
-        // loading fingerprinting library
+        // --------- Fingerprint, storage --------
         FingerprintJS.load()
             .then((fp) => fp.get())
             .then((result) => {
@@ -482,60 +574,47 @@ export default {
                     // restoring storage
                     this.user =
                         Storage.get() === null ? this.user : Storage.get();
-                    this.user.created = [];
-                    this.user.taken = [];
                     // saving fingerprint to component's data
                     this.user.fingerprint = result.visitorId;
                 }
                 this.creatingPoll.startDate = new Date();
-                // ------------- END LOADING ------------
+                // ------------- Warming up server ------------
                 // exiting loading if we're are not GET-ing any poll
                 if (PollId === null) {
-                    this.$toast.success(Replies.loaded);
-                    fetch(Requests.endpoints[this.AppMode] + "/warmup")
-                        .then((res) => res.json())
-                        .then((res) => this.$toast.info(res));
-                    return;
-                    // otherwise fetching poll passed as parameter
-                }
-                return (
-                    fetch(
-                        Requests.endpoints[this.AppMode] +
-                            "/get/" +
-                            PollId.toString()
-                    )
-                        // error, bubbling up to user
+                    Requests.makeReq("get", "warmup")
                         .catch((err) => this.$toast.error(err))
-                        // parsing result
-                        .then((res) => res.json())
-                        // binding results to component's data, displaying, bubbling up confirmation
-                        .then((res) => {
-                            if (!res.resp_get_poll) {
-                                this.$toast.error(
-                                    "Either the poll was not received or could not be decoded, aborting. Unable to carry on."
-                                );
-                                return;
-                            }
-                            const poll = JSON.parse(res.resp_get_poll);
-                            this.takingPoll = poll;
-                            this.takingPoll.results = poll.answers.map((a) => ({
-                                text: a,
-                                value: false,
-                            }));
-                            if (res.resp_get_poll_results) {
-                                this.chart.results = res.resp_get_poll_results.map(
-                                    (d) => parseInt(d)
-                                );
-                                this.setChartOptions();
-                            }
-                            this.$toast.success(
-                                Replies.loaded +
-                                    " Here is your poll. (" +
-                                    res.resp_get_poll_msg +
-                                    ")"
+                        .then((res) => this.$toast.info(res.resp_warmup_msg))
+                    return;
+                }
+                // otherwise fetching poll passed as parameter
+                //--------------- Binding payload to data ---------------
+                return Requests.makeReq("get", "polls")
+                    .catch((err) => this.$toast.error(err))
+                    .then((res) => {
+                        const poll = res.resp_get_poll;
+                        this.displayed = Object.assign(this.displayed, poll);
+                        if (!poll.poll_endDate)
+                            this.displayed.poll_endDate = null;
+                        if (this.displayed.answers)
+                            this.displayed.answers = poll.poll_answers.map(
+                                (a) => ({
+                                    text: a,
+                                    value: false,
+                                })
                             );
-                        })
-                );
+                        if (res.resp_get_poll_scores) {
+                            this.chart.scores = res.resp_get_poll_scores.map(
+                                (d) => parseInt(d)
+                            );
+                            this.setChartOptions();
+                        }
+                        this.$toast.success(
+                            Replies.loaded +
+                                " Here is your poll. (" +
+                                res.resp_get_poll_msg +
+                                ")"
+                        );
+                    });
             });
     },
     computed: {
@@ -548,7 +627,7 @@ export default {
             ].every((i) => i !== "");
         },
         chartStyle() {
-            const x = this.takingPoll.answers.length;
+            const x = this.displayed.answers.length;
             return x === 0
                 ? null
                 : "width: 900px; height: " + (75 * x).toString() + "px";
@@ -558,90 +637,12 @@ export default {
         },
     },
     methods: {
-        testUser() {
-            this.user.email = "garbo email";
-            this.user.hash = "garbo hash";
-            this.user.fingerprint = "garbo fingerprint";
-            this.user.token = "garbo token";
-        },
-        testChart() {
-            const mockPoll = {
-                startDate: new Date(),
-                question: "How to make an omelette without breaking any egg?",
-                description: "Some description",
-                multiple: false,
-                visible: true,
-                answers: [
-                    "AnswerA",
-                    "AnswerB",
-                    "AnswerC",
-                    "AnswerD",
-                    "AnswerE",
-                    "AnswerF",
-                    "AnswerG",
-                ],
-            };
-            const payload = {
-                resp_get_poll_results: [3, 5, 9, 8, 7, 8, 1],
-                resp_get_poll: JSON.stringify(mockPoll),
-                resp_get_poll_msg: "Ok fine",
-            };
-            return Promise.resolve(JSON.stringify(payload))
-                .catch((err) => this.$toast.error(err))
-                .then((res) => {
-                    const p = JSON.parse(res);
-                    this.takingPoll = JSON.parse(p.resp_get_poll);
-                    this.takingPoll.results = this.takingPoll.answers.map(
-                        (a) => ({ text: a, value: false })
-                    );
-                    if (p.resp_get_poll_results) {
-                        this.chart.results = p.resp_get_poll_results.map((d) =>
-                            parseInt(d)
-                        );
-                        this.setChartOptions();
-                    }
-                    this.$toast.success(p.resp_get_poll_msg);
-                });
-        },
-        testSubmitPoll() {
-            const payload = {
-                take_fingerprint: this.user.fingerprint,
-                take_hash: this.user.hash,
-                take_token: this.user.token,
-                take_results: this.takingPoll.answers.map(
-                    (r) =>
-                        this.takingPoll.results.find((x) => x.text === r).value
-                ),
-                take_pollid: PollId,
-            };
-            console.log(JSON.stringify(payload));
-        },
-        setChartOptions() {
-            this.chart.options = {
-                yAxis: {
-                    type: "category",
-                    data: [].concat(this.takingPoll.answers).reverse(), // apparently echart applies some weird sorting
-                },
-                xAxis: {
-                    type: "value",
-                },
-                series: [
-                    {
-                        data: this.chart.results,
-                        type: "bar",
-                        showBackground: false,
-                        backgroundStyle: {
-                            color: "rgba(0, 177, 124, 1)",
-                        },
-                    },
-                ],
-            };
-        },
         toggleResults(k) {
-            this.takingPoll.results[k].value = !this.takingPoll.results[k]
-                .value;
-            if (!this.takingPoll.multiple)
-                this.takingPoll.results.forEach(
+            this.displayed.poll_results[k].value = !this.displayed.poll_results[
+                k
+            ].value;
+            if (!this.displayed.poll_multiple)
+                this.displayed.poll_results.forEach(
                     (item, index) =>
                         (item.value = index === k ? item.value : false)
                 );
@@ -695,12 +696,13 @@ export default {
             const payload = {
                 ask_email: this.user.email,
             };
-            return this.makeReq("post", "ask_token", payload).then((res) => {
-                this.$toast.success(res.resp_ask_token, {
-                    duration: 15000,
-                    dismissible: false,
+            return Requests.makeReq("post", "ask_token", payload)
+                .catch((err) => this.$toast.error(err))
+                .then((res) => {
+                    this.$toast.success(res.resp_ask_token, {
+                        duration: 10000,
+                    });
                 });
-            });
         },
         confirmToken() {
             this.user.token_sent = true;
@@ -709,8 +711,9 @@ export default {
                 confirm_fingerprint: this.user.fingerprint,
                 confirm_email: this.user.email,
             };
-            return this.makeReq("post", "confirm_token", payload).then(
-                (res) => {
+            return Requests.makeReq("post", "confirm_token", payload)
+                .catch((err) => this.$toast.error(err))
+                .then((res) => {
                     if (res.resp_confirm_token && res.resp_confirm_hash) {
                         this.user.token = res.resp_confirm_token;
                         this.user.hash = res.resp_confirm_hash;
@@ -718,8 +721,7 @@ export default {
                     } else {
                         this.$toast.warning(res.resp_confirm_msg);
                     }
-                }
-            );
+                });
         },
         createPoll() {
             let recipe = {
@@ -739,21 +741,39 @@ export default {
                 recipe.poll_endDate = this.creatingPoll.endDate;
                 payload.create_endDate = this.creatingPoll.endDate;
             }
+            const missing_keys = [
+                "poll_startDate",
+                "poll_question",
+                "poll_description",
+                "poll_visible",
+                "poll_multiple",
+                "poll_answers",
+            ].filter((k) => !Object.keys(recipe).includes(k));
+            if (missing_keys.length > 0) {
+                this.$toast.error(
+                    "Missing key from poll: " + JSON.stringigify(missing_keys)
+                );
+                return;
+            }
             payload.create_recipe = JSON.stringify(recipe);
-            return this.makeReq("post", "create", payload).then((res) => {
-                this.$toast.success(res.resp_create_msg);
-                let createdPoll = {
-                    question: this.creatingPoll.question,
-                    startDate: this.creatingPoll.startDate,
-                    link:
-                        Requests[this.AppMode] +
-                        "/" +
-                        res.resp_create_pollid.toString(),
-                };
-                if (this.creatingPoll.endDate)
-                    createdPoll.endDate = this.creatingPoll.endDate;
-                this.user.created.push(createdPoll);
-            });
+            return Requests.makeReq("post", "create", payload)
+                .catch((err) => this.$toast.error(err))
+                .then((res) => {
+                    this.$toast.success(res.resp_create_msg);
+                    let createdPoll = {
+                        question: this.creatingPoll.question,
+                        startDate: this.creatingPoll.startDate,
+                        link:
+                            "/polls/" +
+                            PollId +
+                            "?secret=" +
+                            res.resp_create_pollid.toString(),
+                        secret: res.resp_create_pollsecret,
+                    };
+                    if (this.creatingPoll.endDate !== null)
+                        createdPoll.endDate = this.creatingPoll.endDate;
+                    this.user.created.push(createdPoll);
+                });
         },
         closePoll() {
             const payload = {
@@ -761,24 +781,25 @@ export default {
                 close_token: this.user.token,
                 close_pollid: PollId,
             };
-            return this.makeReq("post", "close", payload).then((res) =>
-                this.$toast.success(res.resp_close_msg)
-            );
+            return Requests.makeReq("post", "close", payload)
+                .catch((err) => this.$toast.error(err))
+                .then((res) => this.$toast.success(res.resp_close_msg));
         },
         takePoll() {
             const payload = {
                 take_fingerprint: this.user.fingerprint,
                 take_hash: this.user.hash,
                 take_token: this.user.token,
-                take_results: this.takingPoll.answers.map(
+                take_results: this.displayed.answers.map(
                     (r) =>
-                        this.takingPoll.results.find((x) => x.text === r).value
+                        this.displayed.poll_results.find((x) => x.text === r)
+                            .value
                 ),
                 take_pollid: PollId,
             };
-            return this.makeReq("post", "take", payload).then((res) =>
-                this.$toast.success(res.resp_take_msg)
-            );
+            return Requests.makeReq("post", "take", payload)
+                .catch((err) => this.$toast.error(err))
+                .then((res) => this.$toast.success(res.resp_take_msg));
         },
         restoreHistory() {
             const payload = {
@@ -787,28 +808,31 @@ export default {
             };
             this.user.created = [];
             this.user.taken = [];
-            return this.makeReq("post", "myhistory", payload).then((res) => {
-                if (res.resp_myhistory !== null) {
-                    this.$toast.success(res.resp_myhistory_msg);
-                    console.log("Attempting to decode pol...");
-                    const mypolls = res.resp_myhistory_polls;
-                    const created = res.resp_myhistory_created;
-                    for (let [k, entry] of Object.entries(mypolls)) {
-                        const poll = JSON.parse(entry[2][1]);
-                        console.log(poll);
-                        const startDate = entry[3][2];
-                        const excerpt = {
-                            question: poll.poll_question,
-                            startDate: startDate,
-                            link:
-                                Requests[this.AppMode] + "/get/" + k.toString(),
-                        };
-                        if (created.includes(k))
-                            this.user.created.push(excerpt);
-                        else this.user.taken.push(excerpt);
-                    }
-                } else this.$toast.error(res.resp_myhistory_msg);
-            });
+            return Requests.makeReq("post", "myhistory", payload)
+                .catch((err) => this.$toast.error(err))
+                .then((res) => {
+                    if (res.resp_myhistory !== null) {
+                        this.$toast.success(res.resp_myhistory_msg);
+                        const mypolls = res.resp_myhistory_polls;
+                        const created = res.resp_myhistory_created;
+                        for (let [k, entry] of Object.entries(mypolls)) {
+                            const poll = JSON.parse(entry[2][1]);
+                            const startDate = new Date(poll.poll_startDate);
+                            const secret = entry[1][1];
+                            const excerpt = {
+                                question: poll.poll_question,
+                                link: "/polls/" + k + "?secret=" + secret,
+                                startDate,
+                                secret,
+                            };
+                            if (poll.poll_endDate !== null)
+                                excerpt.endDate = new Date(poll.poll_endDate);
+                            if (created.includes(k))
+                                this.user.created.push(excerpt);
+                            else this.user.taken.push(excerpt);
+                        }
+                    } else this.$toast.error(res.resp_myhistory_msg);
+                });
         },
         logout() {
             this.user = {
@@ -834,6 +858,8 @@ export default {
                         this.user.hash,
                         this.user.email,
                         this.user.fingerprint,
+                        this.user.created,
+                        this.user.taken,
                     ].every((i) => i !== "")
                 ) {
                     Storage.set(user);

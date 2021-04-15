@@ -1,25 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports    #-}
 {-# LANGUAGE StrictData        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 
 module HandlersDataTypes where
 
 import           Control.Concurrent.MVar
-import           Control.Monad
-import           Crypto.Hash
-import           Crypto.KDF.BCrypt
-import           Crypto.Number.Generate
-import           "cryptonite" Crypto.Random
-import           Data.Aeson
-import qualified Data.Aeson                 as J
-import           Data.Aeson.Extra           (encodeStrict)
+import           Crypto.Random           (SystemDRG, getSystemDRG)
+import           Data.Aeson.Extra        (encodeStrict)
 import           Data.Aeson.TH
-import qualified Data.ByteString            as B
-import qualified Data.HashMap.Strict        as HMS
-import qualified Data.Text                  as T
-import           Data.Text.Encoding         (encodeUtf8)
-import           Data.Time                  (UTCTime (UTCTime))
+import qualified Data.ByteString         as B
+import qualified Data.HashMap.Strict     as HMS
+import qualified Data.Text               as T
+import           Data.Text.Encoding      (encodeUtf8)
+import           Data.Time               (UTCTime (UTCTime))
 --
 
 {- Requests -}
@@ -73,8 +66,8 @@ data ReqTake = ReqTake {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqTake)
 
-data ReqMyHistory = ReqMyHistory { 
-    myhistory_hash :: T.Text,
+data ReqMyHistory = ReqMyHistory {
+    myhistory_hash  :: T.Text,
     myhistory_token :: T.Text
 }
 $(deriveJSON defaultOptions ''ReqMyHistory)
@@ -94,8 +87,9 @@ data RespConfirmToken = RespConfirmToken {
 $(deriveJSON defaultOptions ''RespConfirmToken)
 
 data RespCreate = RespCreate {
-    resp_create_msg    :: T.Text,
-    resp_create_pollid :: Maybe Int
+    resp_create_msg        :: T.Text,
+    resp_create_pollid     :: Maybe Int,
+    resp_create_pollsecret :: Maybe T.Text
 }
 $(deriveJSON defaultOptions ''RespCreate)
 
@@ -106,13 +100,13 @@ newtype RespTake = RespTake { resp_take_msg :: T.Text }
 $(deriveJSON defaultOptions ''RespTake)
 
 data RespGet = RespGet {
-    resp_get_poll_msg     :: T.Text ,
-    resp_get_poll         :: Maybe Poll,
-    resp_get_poll_results :: Maybe [Int]
+    resp_get_poll_msg    :: T.Text ,
+    resp_get_poll        :: Maybe Poll,
+    resp_get_poll_scores :: Maybe [Int]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''RespGet)
 
-newtype RespWarmup = RespWarmup T.Text
+newtype RespWarmup = RespWarmup { resp_warmup_msg :: T.Text }
 $(deriveJSON defaultOptions ''RespWarmup)
 
 data RespMyHistory = RespMyHistory {
@@ -127,20 +121,9 @@ $(deriveJSON defaultOptions ''RespMyHistory)
 {- Stateful types -}
 
 --
-mockPoll :: Poll
-mockPoll = Poll {
-    poll_question = "A question",
-    poll_description = "A description",
-    poll_startDate = "2021-03-14T14:15:14+01:00",
-    poll_endDate = Just "2021-03-16T14:15:14+01:00",
-    poll_multiple = True,
-    poll_visible = True,
-    poll_answers = ["First", "Second", "Third"]
-}
-
 type PollCreator = MVar (Int, SystemDRG)
 
-type PollCache = MVar (HMS.HashMap B.ByteString (Poll, Maybe [Int], UTCTime))
+type PollCache = MVar (HMS.HashMap B.ByteString (Poll, Maybe [Int], UTCTime, Maybe T.Text))
 
 initState :: IO PollCreator
 initState = do
@@ -149,20 +132,3 @@ initState = do
 
 initCache :: IO PollCache
 initCache = newMVar HMS.empty
---
-
-{- Token -}
-
---
-createToken :: Monad m => SystemDRG -> B.ByteString -> m String
-createToken drg salt = do
-    let (bytes, gen) = randomBytes drg 16 :: (B.ByteString, SystemDRG)
-        digest = bcrypt 8 bytes (salt :: B.ByteString) :: B.ByteString
-    pure . show . hashWith SHA256 $ digest
-    where
-        randomBytes = flip randomBytesGenerate
-
-hashEmail email = show $ hashWith SHA256 email
-
-createPollId :: IO Integer
-createPollId = generateBetween 1 100000000

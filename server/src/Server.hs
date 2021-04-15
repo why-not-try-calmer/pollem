@@ -14,6 +14,7 @@ import           Control.Concurrent          (modifyMVar_, putMVar, readMVar,
 import           Control.Monad.Except        (ExceptT, runExceptT)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Reader
+import           Cryptog
 import           Data.Aeson                  (ToJSON (toEncoding), encode,
                                               fromEncoding, fromJSON, toJSON)
 import           Data.Aeson.Extra            (encodeStrict)
@@ -23,24 +24,25 @@ import           Data.Maybe                  (fromMaybe)
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
 import           Database
-import           Database.Redis              (Connection, PortID (PortNumber))
+import           Database.Redis              (Connection, PortID (PortNumber),
+                                              disconnect, info, runRedis)
 import qualified ErrorsReplies               as R
 import           HandlersDataTypes
 import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
 import           Network.Wai.Middleware.Cors
-import           Scheduler                   (getNow, isoOrCustom, schedule)
 import           Servant
 import           System.Environment          (getEnvironment)
-import           Workers
+import           Times                       (fresherThan, getNow, isoOrCustom)
+import           Worker
 
 type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
     "confirm_token" :> ReqBody '[JSON] ReqConfirmToken :> Post '[JSON] RespConfirmToken :<|>
     "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespCreate :<|>
-    "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
-    "get" :> Capture "poll_id" Int :> Get '[JSON] RespGet :<|>
+    -- "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
+    "polls" :> Capture "id" Int :> QueryParam "secret" String :> Get '[JSON] RespGet :<|>
     "myhistory" :> ReqBody '[JSON] ReqMyHistory :> Post '[JSON] RespMyHistory :<|>
     "take" :> ReqBody '[JSON] ReqTake :> Post '[JSON] RespTake :<|>
     "warmup" :> Get '[JSON] RespWarmup
@@ -49,19 +51,20 @@ api :: Proxy API
 api = Proxy
 
 server :: ServerT API AppM
-server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhistory :<|> take :<|> warmup
+server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|> myhistory :<|> take :<|> warmup
     where
         ask_token :: ReqAskToken -> AppM RespAskToken
         ask_token (ReqAskToken email) = do
             let email_b = encodeUtf8 email
             env <- ask
             let mvar = pollmanager env
-                hashed = B.init . B.tail . encodeStrict . hashEmail $ email_b
+                hashed = toCleanB . hashEmail $ email_b
                 asksubmit token = SAsk hashed token
             res <- liftIO $ do
                 (n, gen) <- takeMVar mvar
-                token <- createToken gen email_b
-                let token_b = B.init . B.tail . encodeStrict $ token
+                now <- getNow
+                token <- createToken gen (toCleanB . show $ now)
+                let token_b = toCleanB token
                 putMVar mvar (n, gen)
                 sendEmail (makeSendGridEmail (sendgridconf env) token_b email_b) >>= \case
                     Right _ -> connDo (redisconn env) . submit $ asksubmit token_b
@@ -74,7 +77,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
             let token_b = encodeUtf8 token
                 email_b = encodeUtf8 email
                 fingerprint_b = encodeUtf8 fingerprint
-                hashed = B.init . B.tail . encodeStrict . hashEmail $ email_b
+                hashed = toCleanB . hashEmail $ email_b
             let confirmsubmit = SConfirm token_b fingerprint_b hashed
             env <- ask
             liftIO (connDo (redisconn env) . submit $ confirmsubmit) >>= \case
@@ -91,22 +94,27 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                     Left _  -> Nothing
                     Right _ -> Just . encodeUtf8 $ x) =<< endDate
             env <- ask
-            either_nb <- liftIO $ connDo (redisconn env) getPollsNb
-            case either_nb of
-                Left err -> pure $ RespCreate (R.renderError err) Nothing
-                Right nb ->
-                    let pollid = encodeStrict (nb+1)
-                    in  liftIO $ do
+            liftIO $ connDo (redisconn env) getPollsNb >>= \case
+                Left err -> stopOn err
+                Right total ->
+                    let pollid = encodeStrict (total + 1)
+                        takeManager = takeMVar . pollmanager $ env
+                        produceSecret = do
+                            (n,g) <- takeManager
+                            secret <- createToken g $ encodeUtf8 startDate
+                            putMVar (pollmanager env) (n,g)
+                            pure . toCleanB $ secret
+                    in  do
+                        secret <- produceSecret
                         case isoOrCustom . T.unpack $ startDate of
-                            Left _ -> pure $ RespCreate (R.renderError (R.Err R.DatetimeFormat (mempty :: T.Text))) Nothing
-                            Right date -> do
-                                modifyMVar_ (pollmanager env) $ \p -> pure (nb, snd p)
-                                res <- connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b mb_endDate_b
-                                case res of
-                                    Left err -> pure $ RespCreate (R.renderError err) Nothing
-                                    Right msg -> pure $ RespCreate (R.renderOk msg) (Just nb)
+                            Left _ -> pure $ RespCreate (R.renderError (R.Err R.DatetimeFormat (mempty :: T.Text))) Nothing Nothing
+                            Right date -> liftIO (connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b mb_endDate_b secret) >>=
+                                \case   Left err -> stopOn err
+                                        Right msg -> pure $ RespCreate (R.renderOk msg) (Just $ total + 1) (Just . decodeUtf8 $ secret)
+            where
+                stopOn err = pure $ RespCreate (R.renderError err) Nothing Nothing
 
-        close :: ReqClose -> AppM RespClose
+        {-close :: ReqClose -> AppM RespClose
         close (ReqClose hash token pollid) = do
             let hash_b = encodeUtf8 hash
                 token_b = encodeUtf8 token
@@ -114,33 +122,55 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
             env <- ask
             liftIO (connDo (redisconn env) . submit $ SClose hash_b token_b pollid_b) >>= \case
                 Left err -> pure . RespClose . R.renderError $ err
-                Right ok -> pure $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)
+                Right ok -> pure $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)-}
 
-        get :: Int -> AppM RespGet
-        get pollid =
-            let pollid_b = encodeStrict pollid
-                req = SGet pollid_b
-            in  do
-                env <- ask
-                liftIO $ do
-                    now <- getNow
-                    hmap <- readMVar . pollcache $ env
-                    res <- case HMS.lookup pollid_b hmap of
-                        Just (poll, mb_scores, _) -> pure $ Right (poll, mb_scores)
-                        Nothing -> connDo (redisconn env) . getPoll $ SGet pollid_b
-                    case res of
-                        Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
-                        Right (poll, mb_scores) -> do
-                            modifyMVar_ (pollcache env) (\_ -> pure $ HMS.insert pollid_b (poll, mb_scores, now) hmap)
-                            if poll_visible poll then pure $ RespGet "Ok" (Just poll) mb_scores
-                            else pure $ RespGet "Ok" (Just poll) Nothing
+        get :: Int -> Maybe String -> AppM RespGet
+        get pollid secret_req = do
+            env <- ask
+            liftIO $ do
+                now <- getNow
+                hmap <- readMVar . pollcache $ env
+                case HMS.lookup pollid_b hmap of
+                    -- poll, scores, last accessed datetime, secret
+                    Just (poll, mb_scores, _, mb_secret_stored) ->
+                        if failsTest now poll mb_secret_stored then stop else
+                        if poll_visible poll then goFetch pollid_b env now else do
+                            -- updating cache
+                            updateCache env pollid_b now
+                            finish poll mb_scores
+                    Nothing -> liftIO (connDo (redisconn env) . getPoll $ SGet pollid_b) >>= \case
+                        Left err -> stop
+                        Right (poll, mb_scores, mb_secret_stored_b) ->
+                            if failsTest now poll (decodeUtf8 <$> mb_secret_stored_b) then stop else do
+                            -- adding to cache
+                            modifyMVar_ (pollcache env) (pure . HMS.insert pollid_b (poll, mb_scores, now, mb_secret_req))
+                            finish poll mb_scores
+            where
+                pollid_b = encodeStrict pollid
+                mb_secret_req = T.pack <$> secret_req
+                failsTest now poll mb_secret_stored =
+                    let noMatch = not . fromMaybe False $ (==) <$> mb_secret_req <*> mb_secret_stored
+                        running a Nothing = False
+                        running a mb_b = case poll_endDate poll of
+                            Just b -> case isoOrCustom . T.unpack $ b of Right b_date -> a < b_date
+                            _ -> False
+                    in  running now (poll_endDate poll) && noMatch
+                goFetch pollid env now = liftIO (connDo (redisconn env) . getPoll $ SGet pollid) >>= \case
+                    Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
+                    Right (poll, mb_scores, mb_secret) -> do
+                        updateCache env pollid now
+                        finish poll mb_scores
+                updateCache env pollid now = modifyMVar_ (pollcache env) (pure . HMS.update (\(a, b, _, d) -> Just (a, b, now, d)) pollid)
+                err = R.Err R.BadSecret (mempty :: T.Text)
+                stop = pure $ RespGet (R.renderError err) Nothing Nothing
+                finish poll mb_scores = pure $ RespGet "Ok" (Just poll) mb_scores
 
         myhistory :: ReqMyHistory -> AppM RespMyHistory
         myhistory (ReqMyHistory hash token) =
             let hash_b = encodeUtf8 hash
             in  ask >>= \env -> liftIO (connDo (redisconn env) . getMyPollsData $ hash_b) >>= \case
                 Left err -> pure $ RespMyHistory Nothing Nothing Nothing $ R.renderError err
-                Right (hmap, taken, created) -> 
+                Right (hmap, taken, created) ->
                     let mb l = if null l then Nothing else Just l
                         finish = RespMyHistory (mb hmap) (mb taken) (mb created) "Here's you history."
                     in  pure finish
@@ -149,7 +179,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
         take (ReqTake hash token finger pollid answers) = do
             env <- ask
             res <- liftIO . connDo (redisconn env) . submit $
-                SAnswer (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeStrict . show $ pollid) (map encodeStrict answers)
+                STake (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeStrict . show $ pollid) (map encodeStrict answers)
             case res of
                 Left err  -> pure . RespTake . R.renderError $ err
                 Right msg -> pure . RespTake . R.renderOk $ msg
@@ -196,7 +226,7 @@ startApp = do
     {- initializing connection to database, cache -}
     state <- initState
     cache <- initCache
-    connector <- initRedisConnection
+    connector <- initRedisConnection connInfo
     {- setting up config -}
     let config = Config initSendgridConfig connector state cache
     {- running -}

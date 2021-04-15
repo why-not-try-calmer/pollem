@@ -6,3 +6,6 @@
 ### Live demo
 * client: https://hardcore-hopper-66afd6.netlify.app/
 * server & API endpoint: https://pollem-now.herokuapp.com/
+
+### To do
+* add env vars
