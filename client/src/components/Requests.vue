@@ -361,7 +361,7 @@ import Tabs from "./Tabs";
 import Tab from "./Tab";
 import { ref } from "vue";
 
-const AppMode = "prod"; // "prod"
+const AppMode = "dev"; // "prod"
 
 let PollId = null;
 let PollSecret = null;
