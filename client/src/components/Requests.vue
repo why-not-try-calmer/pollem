@@ -303,7 +303,7 @@
                             :key="k"
                             class="grid grid-cols-3 gap-1"
                         >
-                            <a :href="'#/' + t.link">{{ t.question }}</a>
+                            <a :href="'#' + t.link">{{ t.question }}</a>
                             <input :value="t.startDate" disabled />
                             <input
                                 :value="t.endDate || 'No end date.'"
@@ -325,7 +325,7 @@
                                 :value="t.endDate"
                                 disabled
                             />
-                            <a :href="'#/' + t.link">Go to poll</a>
+                            <a :href="'#' + t.link">Go to poll</a>
                         </div>
                     </div>
                     <div class="mt-5">
