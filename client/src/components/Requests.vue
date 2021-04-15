@@ -346,8 +346,8 @@
                 </tab>
             </tabs>
             <div class="text-right mr-80">
-            <p>Your daily bees fact:</p>
-            <p class="font-extralight italic">{{ todayFact }}.</p>
+                <p>Your daily bees fact:</p>
+                <p class="font-extralight italic">{{ todayFact }}.</p>
             </div>
         </div>
     </div>
@@ -588,9 +588,9 @@ export default {
                     // saving fingerprint to component's data
                     this.user.fingerprint = result.visitorId;
                 }
-                const x = Math.floor(Math.random() * this.bees_facts.length)
-                console.log(x)
-                this.todayFact = this.bees_facts[x]
+                const x = Math.floor(Math.random() * this.bees_facts.length);
+                console.log(x);
+                this.todayFact = this.bees_facts[x];
                 this.creatingPoll.startDate = new Date();
                 // ------------- Warming up server ------------
                 // exiting loading if we're are not GET-ing any poll
@@ -647,8 +647,19 @@ export default {
                 : "width: 900px; height: " + (75 * x).toString() + "px";
         },
         mypolls() {
-            return [...this.user.created, ...this.user.taken];
-        }
+            const ps = [...this.user.created, ...this.user.taken];
+            return ps.reduce(
+                (acc, val) => {
+                    if (acc[0].includes(val.id)) return acc;
+                    else {
+                        let u = [...acc[0], val.id];
+                        let w = [...acc[1], val];
+                        return [u, w];
+                    }
+                },
+                [[], []]
+            )[1];
+        },
     },
     methods: {
         switchToRestored(pollid) {
