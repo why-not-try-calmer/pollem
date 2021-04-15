@@ -1,15 +1,16 @@
 <template>
     <div class="container mb-14 p-8">
-        <a href="/"><img
-            alt="bees"
-            src="../assets/bees_thumb.png"
-            style="
-                opacity: 60%;
-                width: 35%;
-                display: block;
-                margin-left: auto;
-                margin-right: auto;
-            "
+        <a href="/"
+            ><img
+                alt="bees"
+                src="../assets/bees_thumb.png"
+                style="
+                    opacity: 60%;
+                    width: 35%;
+                    display: block;
+                    margin-left: auto;
+                    margin-right: auto;
+                "
         /></a>
         <p class="mt-8 font-medium font-sans text-2xl">Poll'em</p>
         <p class="font-sans mb-8">
@@ -344,6 +345,10 @@
                     </div>
                 </tab>
             </tabs>
+            <div class="text-right mr-80">
+            <p>Your daily bees fact:</p>
+            <p class="font-extralight italic">{{ beesFacts }}.</p>
+            </div>
         </div>
     </div>
 </template>
@@ -537,6 +542,24 @@ export default {
                 token_asked: false,
                 token_sent: false,
             },
+            bees_facts: [
+                "Bees have 5 eyes",
+                "Bees are insects, so they have 6 legs",
+                "Male bees in the hive are called drones",
+                "Bees fly about 20 mph",
+                "Female bees in the hive (except the queen) are called worker bees",
+                "Number of eggs laid by queen: 2,000 per day is the high",
+                "Losing its stinger will cause a bee to die",
+                "Bees have been here about 30 million years!",
+                "Bees carry pollen on their hind legs in a pollen basket or corbicula",
+                "An average beehive can hold around 50,000 bees",
+                "Foragers must collect nectar from about 2 million flowers to make 1 pound of honey",
+                "The average forager makes about 1/12 th of a teaspoon of honey in her lifetime",
+                "Average per capita honey consumption in the US is 1.3 pounds",
+                "Bees have 2 pairs of wings",
+                "The principal form of communication among honey bees is through chemicals called pheromones",
+                "Bees are important because they pollinate approximately 130 agricultural crops in the US including fruit, fiber, nut, and vegetable crops. Bee pollination adds approximately 14 billion dollars annually to improved crop yield and quality.",
+            ],
         };
     },
     setup() {
@@ -622,6 +645,10 @@ export default {
         mypolls() {
             return [...this.user.created, ...this.user.taken];
         },
+        beesFacts() {
+            const x = Math.floor(Math.random(0, this.bees_facts.length-1))
+            return this.bees_facts[x]
+        }
     },
     methods: {
         switchToRestored(pollid) {
@@ -691,7 +718,7 @@ export default {
                 return;
             }
             const url = e + r;
-            if (Requests.routes.get.some(i => i === r))
+            if (Requests.routes.get.some((i) => i === r))
                 return fetch(url)
                     .catch((err) => this.$toast.error(err))
                     .then((res) => res.json());
