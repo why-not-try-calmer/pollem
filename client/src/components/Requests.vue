@@ -1,6 +1,6 @@
 <template>
     <div class="container mb-14 p-8">
-        <img
+        <a href="/"><img
             alt="bees"
             src="../assets/bees_thumb.png"
             style="
@@ -10,7 +10,7 @@
                 margin-left: auto;
                 margin-right: auto;
             "
-        />
+        /></a>
         <p class="mt-8 font-medium font-sans text-2xl">Poll'em</p>
         <p class="font-sans mb-8">
             A simple & hassle-free poll application
@@ -86,12 +86,6 @@
                     </div>
                 </tab>
                 <tab title="Take the poll">
-                    <button
-                        v-if="AppMode === 'dev' && !displayed.poll_startDate"
-                        @click="testChart"
-                    >
-                        Test chart
-                    </button>
                     <div v-if="displayed.poll_startDate" class="mt-10">
                         <div id="displayed" class="flex flex-col">
                             <div>
@@ -181,15 +175,7 @@
                             </div>
                         </div>
                         <button
-                            v-if="AppMode === 'prod'"
                             @click="takePoll"
-                            class="my-5 w-1/3 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
-                        >
-                            Take the poll
-                        </button>
-                        <button
-                            v-else
-                            @click="testSubmitPoll"
                             class="my-5 w-1/3 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
                         >
                             Take the poll
@@ -294,38 +280,49 @@
                     </button>
                 </tab>
                 <tab v-if="loggedIn" title="My Polls">
-                    <div v-if="mypolls">
-                        <p v-if="user.created.length > 0" class="font-bold">
-                            Created
-                        </p>
+                    <div v-if="mypolls.length > 0">
                         <div
-                            v-for="(t, k) in user.created"
+                            v-for="(t, k) in mypolls"
                             :key="k"
-                            class="grid grid-cols-3 gap-1"
+                            class="grid grid-cols-5 gap-1"
                         >
-                            <a :href="'#' + t.link">{{ t.question }}</a>
-                            <input :value="t.startDate" disabled />
-                            <input
-                                :value="t.endDate || 'No end date.'"
-                                disabled
-                            />
-                        </div>
-                        <p v-if="user.taken.length > 0" class="font-bold">
-                            Taken
-                        </p>
-                        <div
-                            v-for="(t, k) in user.taken"
-                            :key="k"
-                            class="grid grid-cols-3 gap-1"
-                        >
-                            <input :value="t.question" disabled />
-                            <input :value="t.startDate" disabled />
-                            <input
-                                v-if="t.endDate"
-                                :value="t.endDate"
-                                disabled
-                            />
-                            <a :href="'#' + t.link">Go to poll</a>
+                            <div>
+                                <a href="#" @click="switchToRestored(t.pollid)">
+                                    {{ t.question }}
+                                </a>
+                            </div>
+                            <div>
+                                <label :for="poll_created + k">created</label>
+                                <input
+                                    class="ml-3"
+                                    disabled
+                                    :id="poll_created + k"
+                                    type="checkbox"
+                                    :checked="
+                                        user.created.some(
+                                            (c) => c.pollid === t.pollid
+                                        )
+                                    "
+                                />
+                            </div>
+                            <div>
+                                <label :for="poll_taken + k">taken:</label>
+                                <input
+                                    class="ml-3"
+                                    disabled
+                                    :id="poll_taken + k"
+                                    type="checkbox"
+                                    :checked="
+                                        user.taken.some(
+                                            (c) => c.pollid === t.pollid
+                                        )
+                                    "
+                                />
+                            </div>
+                            <div>started: {{ t.startDate }}</div>
+                            <div>
+                                expire on: {{ t.endDate || "No end date" }}
+                            </div>
                         </div>
                     </div>
                     <div class="mt-5">
@@ -395,9 +392,10 @@ const Requests = {
         prod: "https://pollem-now.herokuapp.com",
     },
     checkURI(s) {
-        if (!s.includes('#')) return { pollid: null, secret: null };
+        if (!s.includes("polls")) return { pollid: null, secret: null };
         const _s = s.split("#")[1].split("/")[2];
-        if (_s.includes("?")) return { pollid: _s.split("?")[0], secret: _s.split("=")[1] };
+        if (_s.includes("?"))
+            return { pollid: _s.split("?")[0], secret: _s.split("=")[1] };
         return { pollid: _s.split("?")[0], secret: null };
     },
     valid_keys: {
@@ -477,7 +475,7 @@ const Requests = {
             url = url + "/" + PollId + "?secret=" + PollSecret;
         // dealing with a GET-warmup request
         if (method === "get")
-            return fetch(url, config)
+            return fetch(url)
                 .then((res) => res.json())
                 .then((res) => {
                     this.tryPayload(res, this.valid_keys[method][route].resp);
@@ -622,10 +620,51 @@ export default {
                 : "width: 900px; height: " + (75 * x).toString() + "px";
         },
         mypolls() {
-            return this.user.created.length > 0 || this.user.taken.length > 0;
+            return [...this.user.created, ...this.user.taken];
         },
     },
     methods: {
+        switchToRestored(pollid) {
+            return fetch(Requests.server_url[AppMode] + "/polls/" + pollid)
+                .then((res) => res.json())
+                .then((res) => {
+                    const poll = res.resp_get_poll;
+                    this.displayed = Object.assign(this.displayed, poll);
+                    if (!poll.poll_endDate) this.displayed.poll_endDate = null;
+                    if (this.displayed.poll_answers)
+                        this.displayed.poll_results = poll.poll_answers.map(
+                            (a) => ({
+                                text: a,
+                                value: false,
+                            })
+                        );
+                    if (res.resp_get_poll_scores !== null) {
+                        this.chart.scores = res.resp_get_poll_scores.map((d) =>
+                            parseInt(d)
+                        );
+                        this.setChartOptions();
+                    }
+                    PollId = pollid;
+                    this.active = 1;
+                });
+        },
+        setChartOptions() {
+            this.chart.options = {
+                yAxis: {
+                    type: "category",
+                    data: this.displayed.poll_answers,
+                },
+                xAxis: {
+                    type: "value",
+                },
+                series: [
+                    {
+                        data: this.displayed.poll_results,
+                        type: "bar",
+                    },
+                ],
+            };
+        },
         toggleResults(k) {
             this.displayed.poll_results[k].value = !this.displayed.poll_results[
                 k
@@ -752,12 +791,8 @@ export default {
                     let createdPoll = {
                         question: this.creatingPoll.question,
                         startDate: this.creatingPoll.startDate,
-                        link:
-                            "/polls/" +
-                            PollId +
-                            "?secret=" +
-                            res.resp_create_pollid.toString(),
                         secret: res.resp_create_pollsecret,
+                        pollid: res.resp_create_pollid,
                     };
                     if (this.creatingPoll.endDate !== null)
                         createdPoll.endDate = this.creatingPoll.endDate;
@@ -779,10 +814,10 @@ export default {
                 take_fingerprint: this.user.fingerprint,
                 take_hash: this.user.hash,
                 take_token: this.user.token,
-                take_results: this.displayed.answers.map(
-                    (r) =>
-                        this.displayed.poll_results.find((x) => x.text === r)
-                            .value
+                take_results: this.displayed.poll_answers.map((r) =>
+                    this.displayed.poll_results.find((x) => x.text === r).value
+                        ? 1
+                        : 0
                 ),
                 take_pollid: PollId,
             };
@@ -804,21 +839,23 @@ export default {
                         this.$toast.success(res.resp_myhistory_msg);
                         const mypolls = res.resp_myhistory_polls;
                         const created = res.resp_myhistory_created;
+                        const taken = res.resp_myhistory_taken;
                         for (let [k, entry] of Object.entries(mypolls)) {
                             const poll = JSON.parse(entry[2][1]);
                             const startDate = new Date(poll.poll_startDate);
                             const secret = entry[1][1];
                             const excerpt = {
                                 question: poll.poll_question,
-                                link: "/polls/" + k + "?secret=" + secret,
                                 startDate,
                                 secret,
+                                pollid: k,
                             };
                             if (poll.poll_endDate !== null)
                                 excerpt.endDate = new Date(poll.poll_endDate);
                             if (created.includes(k))
                                 this.user.created.push(excerpt);
-                            else this.user.taken.push(excerpt);
+                            if (taken.includes(k))
+                                this.user.taken.push(excerpt);
                         }
                     } else this.$toast.error(res.resp_myhistory_msg);
                 });
