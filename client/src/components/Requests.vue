@@ -656,7 +656,7 @@ export default {
         },
         // ----------- REQUESTS --------------
         makeReq(method, route, payload) {
-            const e = Requests.endpoints[this.AppMode];
+            const e = Requests.server_url[this.AppMode];
             const r = Requests.tryRoute(method, route);
             if (r === null) {
                 this.$toast.error("Bad endpoint! Request aborted.");
