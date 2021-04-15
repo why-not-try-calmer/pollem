@@ -347,7 +347,7 @@
             </tabs>
             <div class="text-right mr-80">
             <p>Your daily bees fact:</p>
-            <p class="font-extralight italic">{{ beesFacts }}.</p>
+            <p class="font-extralight italic">{{ todayFact }}.</p>
             </div>
         </div>
     </div>
@@ -560,6 +560,7 @@ export default {
                 "The principal form of communication among honey bees is through chemicals called pheromones",
                 "Bees are important because they pollinate approximately 130 agricultural crops in the US including fruit, fiber, nut, and vegetable crops. Bee pollination adds approximately 14 billion dollars annually to improved crop yield and quality.",
             ],
+            todayFact: "",
         };
     },
     setup() {
@@ -587,6 +588,9 @@ export default {
                     // saving fingerprint to component's data
                     this.user.fingerprint = result.visitorId;
                 }
+                const x = Math.floor(Math.random() * this.bees_facts.length)
+                console.log(x)
+                this.todayFact = this.bees_facts[x]
                 this.creatingPoll.startDate = new Date();
                 // ------------- Warming up server ------------
                 // exiting loading if we're are not GET-ing any poll
@@ -644,10 +648,6 @@ export default {
         },
         mypolls() {
             return [...this.user.created, ...this.user.taken];
-        },
-        beesFacts() {
-            const x = Math.floor(Math.random(0, this.bees_facts.length-1))
-            return this.bees_facts[x]
         }
     },
     methods: {
@@ -686,7 +686,7 @@ export default {
                 },
                 series: [
                     {
-                        data: this.displayed.poll_results,
+                        data: this.chart.scores,
                         type: "bar",
                     },
                 ],
