@@ -5,6 +5,7 @@
 module Database where
 
 import           Computations           (collect)
+import           Control.Exception      (SomeException (SomeException), try)
 import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson             (decodeStrict)
@@ -12,7 +13,6 @@ import           Data.Aeson.Extra       (encodeStrict)
 import qualified Data.ByteString        as B
 import           Data.ByteString.Char8  (readInt, unsnoc)
 import qualified Data.HashMap.Strict    as HMS
-import qualified Data.Map               as M
 import           Data.Maybe
 import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
@@ -21,7 +21,6 @@ import           ErrorsReplies
 import qualified ErrorsReplies          as R
 import           HandlersDataTypes
 import           Times                  (getNow)
-import Control.Exception (try, SomeException (SomeException))
 --
 
 {-- Requests to db: types --}
@@ -193,9 +192,9 @@ getPoll (SGet pollid) =
                 Right participants ->
                     if null participants then hgetall ("poll:" `B.append` pollid) >>= \case
                         Right poll_raw ->
-                            let poll_metadata = M.fromList poll_raw
-                                mb_secret = M.lookup "secret" poll_metadata
-                            in  case M.lookup "recipe" poll_metadata of
+                            let poll_metadata = HMS.fromList poll_raw
+                                mb_secret = HMS.lookup "secret" poll_metadata
+                            in  case HMS.lookup "recipe" poll_metadata of
                                     Nothing -> borked
                                     Just recipe -> case decodeStrict recipe :: Maybe Poll of
                                         Nothing -> borked
@@ -215,12 +214,12 @@ getPoll (SGet pollid) =
                                 case collect answers of
                                 Left err -> pure . Left $ err
                                 Right collected ->
-                                    let poll_metadata = M.fromList poll_raw
-                                    in  case M.lookup "recipe" poll_metadata of
+                                    let poll_metadata = HMS.fromList poll_raw
+                                    in  case HMS.lookup "recipe" poll_metadata of
                                         Nothing -> borked
                                         Just recipe -> case decodeStrict recipe :: Maybe Poll of
                                             Nothing -> borked
-                                            Just poll -> pure . Right $ (poll, Just $ reverse collected, M.lookup "secret" poll_metadata)
+                                            Just poll -> pure . Right $ (poll, Just $ reverse collected, HMS.lookup "secret" poll_metadata)
                             Nothing -> borked
     where   decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
             decodeByteList val acc = traverse (fmap fst . readInt) val : acc
@@ -286,47 +285,3 @@ getMyPollsData hash = getTakenCreated hash >>= \case
             TxError err -> pure . Left . R.Err R.Custom $ T.pack err
     where
         collectPoll i = hgetall ("poll:" `B.append` i)
-
-{- Tests -}
-
---
-tCreateUser :: Redis (Either Reply Status)
-tCreateUser =
-    let token = "23232"
-        hash = "lklsdklsk"
-        fingerprint = "223322"
-    in  hmset ("user:" `B.append` hash) [("fingerprint", fingerprint),("token", token),("verified", "true")]
-
-tCreatePoll :: B.ByteString -> B.ByteString -> Redis (Either (Err T.Text) (Ok T.Text))
-tCreatePoll hash now =
-    let poll = mockPoll
-        pollid = "1"
-        recipe = encodeStrict poll
-        token = "token1"
-        date_now d = encodeStrict . show $ d
-    in  submit $ SCreate hash token pollid recipe now Nothing ""
-
-tSubmitAnswers :: Redis (Either (Err T.Text) (Ok T.Text))
-tSubmitAnswers =
-    let hash = "lklsdklsk"
-        fingerprint = "223322"
-        pollid = "1"
-        token= "token1"
-        answers = ["0","0","1","1","1"]
-    in submit $ STake hash token fingerprint pollid answers
-
-tGetPoll :: Redis (Either (Err T.Text) (Poll, Maybe [Int], Maybe B.ByteString))
-tGetPoll = let pollid = "1" in getPoll . SGet $ pollid
-
-mockSetStageGetPoll :: Connection -> IO ()
-mockSetStageGetPoll conn =
-    let pollid = "1"
-        hash = "testUser"
-        actions now = do
-            tCreateUser
-            tCreatePoll hash now
-            tSubmitAnswers
-            getPoll . SGet $ pollid
-    in  getNow >>= \now -> connDo conn $ actions (encodeStrict . show $ now) >>= \case
-            Left err  -> liftIO . print . renderError $ err
-            Right res -> liftIO . print . show $ res

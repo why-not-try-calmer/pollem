@@ -44,4 +44,6 @@ runSweeperWorker mvar conn =
         threadDelay $ 1000000 * 3600
         `catch` \e ->
             let e' = e :: SomeException
-            in  print $ "Caught exception, restarting: " ++ show e'
+            in  do
+                print $ "Caught exception, restarting in three hours " ++ show e'
+                threadDelay $ 1000000 * 10800

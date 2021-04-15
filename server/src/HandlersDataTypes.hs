@@ -5,17 +5,14 @@
 module HandlersDataTypes where
 
 import           Control.Concurrent.MVar
-import           Control.Monad
-import           Data.Aeson
-import qualified Data.Aeson                 as J
-import           Data.Aeson.Extra           (encodeStrict)
+import           Crypto.Random           (SystemDRG, getSystemDRG)
+import           Data.Aeson.Extra        (encodeStrict)
 import           Data.Aeson.TH
-import qualified Data.ByteString            as B
-import qualified Data.HashMap.Strict        as HMS
-import qualified Data.Text                  as T
-import           Data.Text.Encoding         (encodeUtf8)
-import           Data.Time                  (UTCTime (UTCTime))
-import Crypto.Random (SystemDRG, getSystemDRG)
+import qualified Data.ByteString         as B
+import qualified Data.HashMap.Strict     as HMS
+import qualified Data.Text               as T
+import           Data.Text.Encoding      (encodeUtf8)
+import           Data.Time               (UTCTime (UTCTime))
 --
 
 {- Requests -}
@@ -90,8 +87,8 @@ data RespConfirmToken = RespConfirmToken {
 $(deriveJSON defaultOptions ''RespConfirmToken)
 
 data RespCreate = RespCreate {
-    resp_create_msg    :: T.Text,
-    resp_create_pollid :: Maybe Int,
+    resp_create_msg        :: T.Text,
+    resp_create_pollid     :: Maybe Int,
     resp_create_pollsecret :: Maybe T.Text
 }
 $(deriveJSON defaultOptions ''RespCreate)
@@ -103,13 +100,13 @@ newtype RespTake = RespTake { resp_take_msg :: T.Text }
 $(deriveJSON defaultOptions ''RespTake)
 
 data RespGet = RespGet {
-    resp_get_poll_msg     :: T.Text ,
-    resp_get_poll         :: Maybe Poll,
+    resp_get_poll_msg    :: T.Text ,
+    resp_get_poll        :: Maybe Poll,
     resp_get_poll_scores :: Maybe [Int]
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''RespGet)
 
-newtype RespWarmup = RespWarmup T.Text
+newtype RespWarmup = RespWarmup { resp_warmup_msg :: T.Text }
 $(deriveJSON defaultOptions ''RespWarmup)
 
 data RespMyHistory = RespMyHistory {
@@ -124,17 +121,6 @@ $(deriveJSON defaultOptions ''RespMyHistory)
 {- Stateful types -}
 
 --
-mockPoll :: Poll
-mockPoll = Poll {
-    poll_question = "A question",
-    poll_description = "A description",
-    poll_startDate = "2021-03-14T14:15:14+01:00",
-    poll_endDate = Just "2021-03-16T14:15:14+01:00",
-    poll_multiple = True,
-    poll_visible = True,
-    poll_answers = ["First", "Second", "Third"]
-}
-
 type PollCreator = MVar (Int, SystemDRG)
 
 type PollCache = MVar (HMS.HashMap B.ByteString (Poll, Maybe [Int], UTCTime, Maybe T.Text))

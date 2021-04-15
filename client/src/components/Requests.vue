@@ -303,14 +303,9 @@
                             :key="k"
                             class="grid grid-cols-3 gap-1"
                         >
-                            <input :value="t.question" disabled />
+                            <a :href="t.link">{{ t.question }}</a>
                             <input :value="t.startDate" disabled />
-                            <input
-                                v-if="t.endDate"
-                                :value="t.endDate"
-                                disabled
-                            />
-                            <a :href="t.link">Go to poll</a>
+                            <input :value="t.endDate || 'No end date.'" disabled />
                         </div>
                         <p v-if="user.taken.length > 0" class="font-bold">
                             Taken
@@ -360,6 +355,8 @@ import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import Tabs from "./Tabs";
 import Tab from "./Tab";
 import { ref } from "vue";
+
+const AppMode = "dev"; // "prod"
 
 let PollId = null;
 let PollSecret = null;
@@ -458,15 +455,19 @@ const Requests = {
             },
         },
         get: {
-            req: ["polls", "warmup"],
-            resp: [
-                "resp_get_poll_msg",
-                "resp_get_poll",
-                "resp_get_poll_scores",
-            ],
+            polls: {
+                resp: [
+                    "resp_get_poll_msg",
+                    "resp_get_poll",
+                    "resp_get_poll_scores",
+                ],
+            },
+            warmup: {
+                resp: ["resp_warmup_msg"],
+            },
         },
     },
-    validOrError(payload, refKeys) {
+    tryPayload(payload, refKeys) {
         const missing_keys = refKeys.filter(
             (k) => !Object.keys(payload).includes(k)
         );
@@ -481,17 +482,22 @@ const Requests = {
     },
     makeReq(method, route, payload = null) {
         this.tryRoute(method, route);
-        const host = this.server_url[this.AppMode];
-        const url = host + "/" + route;
-        // dealing with a GET-warmup request
-        if (route === "warmup") return fetch(url).then((res) => res.json());
-        // dealing with a GET-polls requests
+        const host = this.server_url[AppMode];
+        let url = host + "/" + route;
         if (route === "polls")
-            return fetch(url + "/" + PollId + "?secret=" + PollSecret);
+            url = url + "/" + PollId + "?secret=" + PollSecret;
+        // dealing with a GET-warmup request
+        if (method === "get")
+            return fetch(url, config)
+                .then((res) => res.json())
+                .then((res) => {
+                    this.tryPayload(res, this.valid_keys[method][route].resp);
+                    return res
+                });
         // dealing with a POST request
         if (payload === null)
             throw new Error("Empty payload found in " + url + "request.");
-        this.tryValidate(payload, this.valid_keys[method].req);
+        this.tryPayload(payload, this.valid_keys[method][route].req);
         const config = {
             headers: {
                 "Content-Type": "application/json",
@@ -503,7 +509,7 @@ const Requests = {
         return fetch(url, config)
             .then((res) => res.json())
             .then((payload) => {
-                this.tryValidate(payload, this.valid_keys[method].resp);
+                this.tryPayload(payload, this.valid_keys[method][route].resp);
                 return payload;
             });
     },
@@ -519,7 +525,6 @@ export default {
     },
     data() {
         return {
-            AppMode: "dev", // "prod"
             creatingPoll: {
                 startDate: null,
                 endDate: null,
@@ -576,17 +581,14 @@ export default {
                 // ------------- Warming up server ------------
                 // exiting loading if we're are not GET-ing any poll
                 if (PollId === null) {
-                    this.$toast.success(Replies.loaded);
                     Requests.makeReq("get", "warmup")
-                        .then((res) => res.json())
-                        .then((res) => this.$toast.info(res))
-                        .catch((err) => this.$toast.error(err));
+                        .catch((err) => this.$toast.error(err))
+                        .then((res) => this.$toast.info(res.resp_warmup_msg))
                     return;
                 }
                 // otherwise fetching poll passed as parameter
                 //--------------- Binding payload to data ---------------
                 return Requests.makeReq("get", "polls")
-                    .then((res) => res.json())
                     .catch((err) => this.$toast.error(err))
                     .then((res) => {
                         const poll = res.resp_get_poll;
