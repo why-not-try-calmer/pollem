@@ -303,9 +303,12 @@
                             :key="k"
                             class="grid grid-cols-3 gap-1"
                         >
-                            <a :href="t.link">{{ t.question }}</a>
+                            <a :href="'#/' + t.link">{{ t.question }}</a>
                             <input :value="t.startDate" disabled />
-                            <input :value="t.endDate || 'No end date.'" disabled />
+                            <input
+                                :value="t.endDate || 'No end date.'"
+                                disabled
+                            />
                         </div>
                         <p v-if="user.taken.length > 0" class="font-bold">
                             Taken
@@ -322,7 +325,7 @@
                                 :value="t.endDate"
                                 disabled
                             />
-                            <a :href="t.link">Go to poll</a>
+                            <a :href="'#/' + t.link">Go to poll</a>
                         </div>
                     </div>
                     <div class="mt-5">
@@ -391,25 +394,10 @@ const Requests = {
         dev: "http://localhost:8009",
         prod: "https://pollem-now.herokuapp.com",
     },
-    checkURI(uri) {
-        const s = uri.split("/"),
-            g = s[3],
-            mb_param = s[4];
-        if (g !== "polls") return { secret: null, pollid: null };
-        if (mb_param.includes("secret")) {
-            const head = mb_param.split("?"),
-                body = head[1],
-                secret = body.split("=")[1],
-                pollid = head[0];
-            return {
-                pollid,
-                secret,
-            };
-        }
-        return {
-            pollid: mb_param,
-            secret: null,
-        };
+    checkURI(s) {
+        const _s = s.split("#")[1].split("/")[2];
+        if (_s.includes("?")) return { pollid: _s.split("?")[0], secret: _s.split("=")[1] };
+        return { pollid: _s.split("?")[0], secret: null };
     },
     valid_keys: {
         post: {
@@ -492,7 +480,7 @@ const Requests = {
                 .then((res) => res.json())
                 .then((res) => {
                     this.tryPayload(res, this.valid_keys[method][route].resp);
-                    return res
+                    return res;
                 });
         // dealing with a POST request
         if (payload === null)
@@ -583,7 +571,7 @@ export default {
                 if (PollId === null) {
                     Requests.makeReq("get", "warmup")
                         .catch((err) => this.$toast.error(err))
-                        .then((res) => this.$toast.info(res.resp_warmup_msg))
+                        .then((res) => this.$toast.info(res.resp_warmup_msg));
                     return;
                 }
                 // otherwise fetching poll passed as parameter
