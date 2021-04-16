@@ -17,3 +17,15 @@ rdcli -h redis-18910.c247.eu-west-1-1.ec2.cloud.redislabs.com -p 18910 -a PGO5OZ
 * server & API endpoint: https://pollem-now.herokuapp.com/
 ### To do
 * [x] add env vars
+
+```
+<ul>
+        <li>Hash {{ user.hash }}</li>
+        <li>Email {{ user.email }}</li>
+        <li>Token {{ user.token }}</li>
+        <li>Fingerprint {{ user.fingerprint }}</li>
+        <li>Taken: {{ user.taken }}</li>
+        <li>Created: {{ user.created }}</li>
+        <li>MyPoll: {{ mypolls }}</li>
+</ul>
+```
