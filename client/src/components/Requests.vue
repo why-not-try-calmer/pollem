@@ -6,7 +6,7 @@
                 src="../assets/bees_thumb.png"
                 style="
                     opacity: 60%;
-                    width: 35%;
+                    width: 27%;
                     display: block;
                     margin-left: auto;
                     margin-right: auto;
@@ -283,14 +283,22 @@
                 <tab v-if="loggedIn" title="My Polls">
                     <div v-if="mypolls.length > 0">
                         <div
-                            v-for="(t, k) in mypolls"
+                            v-for="(p, k) in mypolls"
                             :key="k"
-                            class="grid grid-cols-5 gap-1"
+                            class="grid grid-cols-6 gap-1"
                         >
                             <div>
-                                <a href="#" @click="switchToRestored(t.pollid)">
-                                    {{ t.question }}
+                                <a href="#" @click="switchToRestored(p.pollid)">
+                                    {{ p.question }}
                                 </a>
+                            </div>
+                            <div>
+                                <button
+                                    class="p-1 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
+                                    @click="clipBoard(p.pollid, p.secret)"
+                                >
+                                    Share link
+                                </button>
                             </div>
                             <div>
                                 <label>created</label>
@@ -300,7 +308,7 @@
                                     type="checkbox"
                                     :checked="
                                         user.created.some(
-                                            (c) => c.pollid === t.pollid
+                                            (c) => c.pollid === p.pollid
                                         )
                                     "
                                 />
@@ -313,14 +321,14 @@
                                     type="checkbox"
                                     :checked="
                                         user.taken.some(
-                                            (c) => c.pollid === t.pollid
+                                            (c) => c.pollid === p.pollid
                                         )
                                     "
                                 />
                             </div>
-                            <div>started: {{ t.startDate }}</div>
+                            <div>{{ p.startDate }}</div>
                             <div>
-                                expire on: {{ t.endDate || "No end date" }}
+                                {{ p.endDate !== null || "No end date" }}
                             </div>
                         </div>
                     </div>
@@ -355,7 +363,7 @@
         <li>Token {{ user.token }}</li>
         <li>Fingerprint {{ user.fingerprint }}</li>
         <li>Taken: {{ user.taken }}</li>
-        <li>Created: {{ user.created}}</li>
+        <li>Created: {{ user.created }}</li>
         <li>MyPoll: {{ mypolls }}</li>
     </ul>
 </template>
@@ -367,8 +375,6 @@ import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import Tabs from "./Tabs";
 import Tab from "./Tab";
 import { ref } from "vue";
-
-const AppMode = "dev"; // "prod"
 
 let PollId = null;
 let PollSecret = null;
@@ -442,7 +448,15 @@ const Requests = {
                     "resp_create_pollsecret",
                 ],
             },
-            myhistory: { req: ["myhistory_hash", "myhistory_token"], resp: [] },
+            myhistory: {
+                req: ["myhistory_hash", "myhistory_token"],
+                resp: [
+                    "resp_myhistory_polls",
+                    "resp_myhistory_taken",
+                    "resp_myhistory_created",
+                    "resp_myhistory_msg",
+                ],
+            },
             take: {
                 req: [
                     "take_fingerprint",
@@ -481,8 +495,8 @@ const Requests = {
     },
     makeReq(method, route, payload = null) {
         this.tryRoute(method, route);
-        const host = this.server_url[AppMode];
-        let url = host + "/" + route;
+        const endpoint = this.server_url[this.AppMode];
+        let url = endpoint + "/" + route;
         if (route === "polls")
             url = url + "/" + PollId + "?secret=" + PollSecret;
         // dealing with a GET-warmup request
@@ -524,6 +538,8 @@ export default {
     },
     data() {
         return {
+            AppMode: "dev", // "prod"
+            Host: "https://hardcore-hopper-66afd6.netlify.app",
             creatingPoll: {
                 startDate: null,
                 endDate: null,
@@ -672,7 +688,7 @@ export default {
     },
     methods: {
         switchToRestored(pollid) {
-            return fetch(Requests.server_url[AppMode] + "/polls/" + pollid)
+            return fetch(Requests.server_url[this.AppMode] + "/polls/" + pollid)
                 .then((res) => res.json())
                 .then((res) => {
                     const poll = res.resp_get_poll;
@@ -715,6 +731,12 @@ export default {
                 ],
             };
         },
+        clipBoard(pollid, secret) {
+            const url = this.Host + "/#/polls/" + pollid + "?secret=" + secret
+            navigator.clipboard.writeText(url)
+            .then(() => this.$toast.info("Copied to clipboard."))
+            .catch(() => this.$toast.warning("Unable to copy, please open the link and copy from your URL bar"));
+        },
         toggleResults(k) {
             this.displayed.poll_results[k].value = !this.displayed.poll_results[
                 k
@@ -734,7 +756,7 @@ export default {
         },
         // ----------- REQUESTS --------------
         makeReq(method, route, payload) {
-            const e = Requests.server_url[AppMode];
+            const e = Requests.server_url[this.AppMode];
             const r = Requests.tryRoute(method, route);
             if (r === null) {
                 this.$toast.error("Bad endpoint! Request aborted.");
