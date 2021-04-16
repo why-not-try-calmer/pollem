@@ -369,7 +369,7 @@ import { ref } from "vue";
 
 let PollId = null;
 let PollSecret = null;
-const AppMode = "dev" // "prod"
+const AppMode = "prod" // "dev"
 
 const Replies = {
     noLocalStorage:
