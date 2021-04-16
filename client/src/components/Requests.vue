@@ -627,6 +627,7 @@ export default {
                 return Requests.makeReq("get", "polls")
                     .catch((err) => this.$toast.error(err))
                     .then((res) => {
+                        this.tryPayload(res, this.valid_keys.get.polls.resp)
                         const poll = res.resp_get_poll;
                         this.displayed = Object.assign(this.displayed, poll);
                         if (!poll.poll_endDate)
@@ -683,7 +684,7 @@ export default {
                     }
                 },
                 [[], []]
-            )[1];
+            ).pop();
         },
     },
     methods: {
@@ -691,6 +692,7 @@ export default {
             return fetch(Requests.server_url[this.AppMode] + "/polls/" + pollid)
                 .then((res) => res.json())
                 .then((res) => {
+                    this.tryPayload(res, this.valid_keys.get.polls.resp)
                     const poll = res.resp_get_poll;
                     this.displayed = Object.assign(this.displayed, poll);
                     if (!poll.poll_endDate) this.displayed.poll_endDate = null;
