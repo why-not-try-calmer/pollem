@@ -730,7 +730,7 @@ export default {
                         );
                     }
                     PollId = pollid;
-                    this.active = 1;
+                    this.active = 2;
                 });
         },
         setChartOptions(questions, scores) {
