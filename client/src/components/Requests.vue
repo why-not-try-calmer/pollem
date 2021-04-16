@@ -732,10 +732,15 @@ export default {
             };
         },
         clipBoard(pollid, secret) {
-            const url = this.Host + "/#/polls/" + pollid + "?secret=" + secret
-            navigator.clipboard.writeText(url)
-            .then(() => this.$toast.info("Copied to clipboard."))
-            .catch(() => this.$toast.warning("Unable to copy, please open the link and copy from your URL bar"));
+            const url = this.Host + "/#/polls/" + pollid + "?secret=" + secret;
+            navigator.clipboard
+                .writeText(url)
+                .then(() => this.$toast.info("Copied to clipboard."))
+                .catch(() =>
+                    this.$toast.warning(
+                        "Unable to copy, please open the link and copy from your URL bar"
+                    )
+                );
         },
         toggleResults(k) {
             this.displayed.poll_results[k].value = !this.displayed.poll_results[
