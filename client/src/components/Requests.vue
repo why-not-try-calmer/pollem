@@ -378,6 +378,7 @@ import { ref } from "vue";
 
 let PollId = null;
 let PollSecret = null;
+const AppMode = "dev" // "prod"
 
 const Replies = {
     noLocalStorage:
@@ -495,7 +496,7 @@ const Requests = {
     },
     makeReq(method, route, payload = null) {
         this.tryRoute(method, route);
-        const endpoint = this.server_url[this.AppMode];
+        const endpoint = this.server_url[AppMode];
         let url = endpoint + "/" + route;
         if (route === "polls")
             url = url + "/" + PollId + "?secret=" + PollSecret;
@@ -538,7 +539,6 @@ export default {
     },
     data() {
         return {
-            AppMode: "dev", // "prod"
             Host: "https://hardcore-hopper-66afd6.netlify.app",
             creatingPoll: {
                 startDate: null,
@@ -689,7 +689,7 @@ export default {
     },
     methods: {
         switchToRestored(pollid) {
-            return fetch(Requests.server_url[this.AppMode] + "/polls/" + pollid)
+            return fetch(Requests.server_url[AppMode] + "/polls/" + pollid)
                 .then((res) => res.json())
                 .then((res) => {
                     this.tryPayload(res, Requests.valid_keys.get.polls.resp)
@@ -763,7 +763,7 @@ export default {
         },
         // ----------- REQUESTS --------------
         makeReq(method, route, payload) {
-            const e = Requests.server_url[this.AppMode];
+            const e = Requests.server_url[AppMode];
             const r = Requests.tryRoute(method, route);
             if (r === null) {
                 this.$toast.error("Bad endpoint! Request aborted.");
