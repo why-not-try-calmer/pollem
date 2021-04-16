@@ -293,11 +293,10 @@
                                 </a>
                             </div>
                             <div>
-                                <label :for="poll_created + k">created</label>
+                                <label>created</label>
                                 <input
                                     class="ml-3"
                                     disabled
-                                    :id="poll_created + k"
                                     type="checkbox"
                                     :checked="
                                         user.created.some(
@@ -307,11 +306,10 @@
                                 />
                             </div>
                             <div>
-                                <label :for="poll_taken + k">taken:</label>
+                                <label>taken:</label>
                                 <input
                                     class="ml-3"
                                     disabled
-                                    :id="poll_taken + k"
                                     type="checkbox"
                                     :checked="
                                         user.taken.some(
@@ -351,6 +349,15 @@
             </div>
         </div>
     </div>
+    <ul>
+        <li>Hash {{ user.hash }}</li>
+        <li>Email {{ user.email }}</li>
+        <li>Token {{ user.token }}</li>
+        <li>Fingerprint {{ user.fingerprint }}</li>
+        <li>Taken: {{ user.taken }}</li>
+        <li>Created: {{ user.created}}</li>
+        <li>MyPoll: {{ mypolls }}</li>
+    </ul>
 </template>
 
 <script>
@@ -589,7 +596,6 @@ export default {
                     this.user.fingerprint = result.visitorId;
                 }
                 const x = Math.floor(Math.random() * this.bees_facts.length);
-                console.log(x);
                 this.todayFact = this.bees_facts[x];
                 this.creatingPoll.startDate = new Date();
                 // ------------- Warming up server ------------
@@ -620,7 +626,10 @@ export default {
                             this.chart.scores = res.resp_get_poll_scores.map(
                                 (d) => parseInt(d)
                             );
-                            this.setChartOptions();
+                            this.setChartOptions(
+                                this.displayed.poll_answers,
+                                this.chart.scores
+                            );
                         }
                         this.$toast.success(
                             Replies.loaded +
@@ -641,7 +650,7 @@ export default {
             ].every((i) => i !== "");
         },
         chartStyle() {
-            const x = this.displayed.answers.length;
+            const x = this.displayed.poll_answers.length;
             return x === 0
                 ? null
                 : "width: 900px; height: " + (75 * x).toString() + "px";
@@ -650,9 +659,9 @@ export default {
             const ps = [...this.user.created, ...this.user.taken];
             return ps.reduce(
                 (acc, val) => {
-                    if (acc[0].includes(val.id)) return acc;
+                    if (acc[0].includes(val.pollid)) return acc;
                     else {
-                        let u = [...acc[0], val.id];
+                        let u = [...acc[0], val.pollid];
                         let w = [...acc[1], val];
                         return [u, w];
                     }
@@ -680,24 +689,27 @@ export default {
                         this.chart.scores = res.resp_get_poll_scores.map((d) =>
                             parseInt(d)
                         );
-                        this.setChartOptions();
+                        this.setChartOptions(
+                            this.displayed.poll_answers,
+                            this.chart.scores
+                        );
                     }
                     PollId = pollid;
                     this.active = 1;
                 });
         },
-        setChartOptions() {
+        setChartOptions(questions, scores) {
             this.chart.options = {
                 yAxis: {
                     type: "category",
-                    data: this.displayed.poll_answers,
+                    data: questions,
                 },
                 xAxis: {
                     type: "value",
                 },
                 series: [
                     {
-                        data: this.chart.scores,
+                        data: scores,
                         type: "bar",
                     },
                 ],
@@ -722,7 +734,7 @@ export default {
         },
         // ----------- REQUESTS --------------
         makeReq(method, route, payload) {
-            const e = Requests.server_url[this.AppMode];
+            const e = Requests.server_url[AppMode];
             const r = Requests.tryRoute(method, route);
             if (r === null) {
                 this.$toast.error("Bad endpoint! Request aborted.");
@@ -841,7 +853,7 @@ export default {
             const payload = {
                 close_hash: this.user.hash,
                 close_token: this.user.token,
-                close_pollid: PollId,
+                close_pollid: PollId.toString(),
             };
             return Requests.makeReq("post", "close", payload)
                 .catch((err) => this.$toast.error(err))
@@ -857,7 +869,7 @@ export default {
                         ? 1
                         : 0
                 ),
-                take_pollid: PollId,
+                take_pollid: PollId.toString(),
             };
             return Requests.makeReq("post", "take", payload)
                 .catch((err) => this.$toast.error(err))

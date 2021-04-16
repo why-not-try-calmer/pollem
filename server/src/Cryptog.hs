@@ -8,8 +8,8 @@ import Crypto.KDF.BCrypt (bcrypt)
 import Crypto.Number.Generate (generateBetween)
 import Data.Text.Encoding ( encodeUtf8 )
 
-createToken :: Monad m => SystemDRG -> B.ByteString  -> m String
-createToken drg salt = do
+createCrypto :: Monad m => SystemDRG -> B.ByteString  -> m String
+createCrypto drg salt = do
     let (bytes, gen) = randomBytes drg 16 :: (B.ByteString, SystemDRG)
         digest = bcrypt 8 bytes (salt :: B.ByteString) :: B.ByteString
     pure . show . hashWith SHA256 $ digest

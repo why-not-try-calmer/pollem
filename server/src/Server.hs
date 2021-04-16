@@ -63,7 +63,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
             res <- liftIO $ do
                 (n, gen) <- takeMVar mvar
                 now <- getNow
-                token <- createToken gen (toCleanB . show $ now)
+                token <- createCrypto gen (toCleanB . show $ now)
                 let token_b = toCleanB token
                 putMVar mvar (n, gen)
                 sendEmail (makeSendGridEmail (sendgridconf env) token_b email_b) >>= \case
@@ -101,7 +101,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                         takeManager = takeMVar . pollmanager $ env
                         produceSecret = do
                             (n,g) <- takeManager
-                            secret <- createToken g $ encodeUtf8 startDate
+                            secret <- createCrypto g $ encodeUtf8 startDate
                             putMVar (pollmanager env) (n,g)
                             pure . toCleanB $ secret
                     in  do
