@@ -618,7 +618,7 @@ export default {
                 return Requests.makeReq("get", "polls")
                     .catch((err) => this.$toast.error(err))
                     .then((res) => {
-                        this.tryPayload(res, Requests.valid_keys.get.polls.resp)
+                        Requests.tryPayload(res, Requests.valid_keys.get.polls.resp)
                         const poll = res.resp_get_poll;
                         this.displayed = Object.assign(this.displayed, poll);
                         if (!poll.poll_endDate)
@@ -683,7 +683,7 @@ export default {
             return fetch(Requests.server_url[AppMode] + "/polls/" + pollid)
                 .then((res) => res.json())
                 .then((res) => {
-                    this.tryPayload(res, Requests.valid_keys.get.polls.resp)
+                    Requests.tryPayload(res, Requests.valid_keys.get.polls.resp)
                     const poll = res.resp_get_poll;
                     this.displayed = Object.assign(this.displayed, poll);
                     if (!poll.poll_endDate) this.displayed.poll_endDate = null;
