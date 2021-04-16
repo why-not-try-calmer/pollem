@@ -529,7 +529,7 @@ export default {
     },
     data() {
         return {
-            AppMode: "dev", // "prod"
+            AppMode: "prod", // "dev"
             Host: "https://hardcore-hopper-66afd6.netlify.app",
             creatingPoll: {
                 startDate: null,
