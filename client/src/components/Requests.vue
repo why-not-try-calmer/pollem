@@ -349,15 +349,6 @@
             </div>
         </div>
     </div>
-    <ul>
-        <li>Hash {{ user.hash }}</li>
-        <li>Email {{ user.email }}</li>
-        <li>Token {{ user.token }}</li>
-        <li>Fingerprint {{ user.fingerprint }}</li>
-        <li>Taken: {{ user.taken }}</li>
-        <li>Created: {{ user.created}}</li>
-        <li>MyPoll: {{ mypolls }}</li>
-    </ul>
 </template>
 
 <script>
