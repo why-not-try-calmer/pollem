@@ -19,6 +19,24 @@
         </p>
         <div>
             <tabs v-model="active">
+                <tab title="Changelog and features">
+                    <div>
+                        <p class="font-bold">Done</p>
+                        <ul>
+                            <li>Private polls by default</li>
+                            <li>Authentication via email</li>
+                            <li>Uniqueness checks (no "double voting")</li>
+                            <li>Shareable with authorized links</li>
+                        </ul>
+                        <p class="font-bold">To do</p>
+                        <ul>
+                            <li>Closable polls</li>
+                            <li>Email notification on poll close</li>
+                            <li>Push notification on poll close</li>
+                            <li>Public API</li>
+                        </ul>
+                    </div>
+                </tab>
                 <tab title="Your account">
                     <div class="m-4" v-if="loggedIn">
                         <p>Welcome, {{ user.email }}</p>
@@ -352,7 +370,7 @@
                 </tab>
             </tabs>
             <div class="text-right mr-80">
-                <p>Your daily bees fact:</p>
+                <p class="mt-14">Your daily bees fact:</p>
                 <p class="font-extralight italic">{{ todayFact }}.</p>
             </div>
         </div>
@@ -378,7 +396,7 @@ import { ref } from "vue";
 
 let PollId = null;
 let PollSecret = null;
-const AppMode = "dev" // "prod"
+const AppMode = "dev"; // "prod"
 
 const Replies = {
     noLocalStorage:
@@ -593,8 +611,8 @@ export default {
         if (pollid !== null) {
             PollId = parseInt(pollid);
             PollSecret = secret;
-            active = ref(1);
-        } else active = ref(0);
+            active = ref(2);
+        } else active = ref(1);
         return { active };
     },
     mounted() {
@@ -627,7 +645,10 @@ export default {
                 return Requests.makeReq("get", "polls")
                     .catch((err) => this.$toast.error(err))
                     .then((res) => {
-                        Requests.tryPayload(res, Requests.valid_keys.get.polls.resp)
+                        Requests.tryPayload(
+                            res,
+                            Requests.valid_keys.get.polls.resp
+                        );
                         const poll = res.resp_get_poll;
                         this.displayed = Object.assign(this.displayed, poll);
                         if (!poll.poll_endDate)
@@ -674,17 +695,19 @@ export default {
         },
         mypolls() {
             const ps = [...this.user.created, ...this.user.taken];
-            return ps.reduce(
-                (acc, val) => {
-                    if (acc[0].includes(val.pollid)) return acc;
-                    else {
-                        let u = [...acc[0], val.pollid];
-                        let w = [...acc[1], val];
-                        return [u, w];
-                    }
-                },
-                [[], []]
-            ).pop();
+            return ps
+                .reduce(
+                    (acc, val) => {
+                        if (acc[0].includes(val.pollid)) return acc;
+                        else {
+                            let u = [...acc[0], val.pollid];
+                            let w = [...acc[1], val];
+                            return [u, w];
+                        }
+                    },
+                    [[], []]
+                )
+                .pop();
         },
     },
     methods: {
@@ -692,7 +715,10 @@ export default {
             return fetch(Requests.server_url[AppMode] + "/polls/" + pollid)
                 .then((res) => res.json())
                 .then((res) => {
-                    Requests.tryPayload(res, Requests.valid_keys.get.polls.resp)
+                    Requests.tryPayload(
+                        res,
+                        Requests.valid_keys.get.polls.resp
+                    );
                     const poll = res.resp_get_poll;
                     this.displayed = Object.assign(this.displayed, poll);
                     if (!poll.poll_endDate) this.displayed.poll_endDate = null;
