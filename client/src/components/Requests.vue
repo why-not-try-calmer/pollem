@@ -19,16 +19,45 @@
         </p>
         <div>
             <tabs v-model="active">
-                <tab title="Changelog and features">
+                <tab title="Help">
+                    <p class="text-2xl">How this works</p>
+                    <div class="text-left">
+                        <p>
+                            * All polls are private by default. This means that to
+                            display the poll, you need to have created it or to
+                            access it from an url referencing a valid "secret"
+                            parameter value.
+                        </p>
+                        <p>
+                            * To share such a link, go to the "My polls" tab, and
+                            click on the "Share" button next to a poll you've
+                            created. It will copy the link to the clipboard. You
+                            can now share it at leisure.
+                        </p>
+                        <p>
+                            * Accessing a poll and displaying the results or
+                            scores are distinct notions. When a poll has
+                            expired, all scores are displayed to anyone.
+                            Otherwise, as long as the poll has not expired, and
+                            if the creator has created the poll with invisible
+                            scores, nobody -- not even the author -- will be
+                            able to see the results.
+                        </p>
+                        <p>
+                            * When creating a poll, setting an end date is not
+                            mandatory.
+                        </p>
+                    </div>
                     <div>
-                        <p class="font-bold">Done</p>
+                        <p class="text-2xl mt-3">Features</p>
+                        <p class="font-bold mt-2">Done</p>
                         <ul>
                             <li>Private polls by default</li>
                             <li>Authentication via email</li>
                             <li>Uniqueness checks (no "double voting")</li>
                             <li>Shareable with authorized links</li>
                         </ul>
-                        <p class="font-bold">To do</p>
+                        <p class="font-bold mt-2">To do</p>
                         <ul>
                             <li>Closable polls</li>
                             <li>Email notification on poll close</li>
