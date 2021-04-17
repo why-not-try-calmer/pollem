@@ -187,7 +187,7 @@ getPoll (SGet pollid) =
         key = ("poll:" `B.append` pollid)
     in  hgetall key >>= \case
         Left _ -> dbErr
-        Right poll_raw -> 
+        Right poll_raw ->
             if null poll_raw then noPoll else
             smembers ("participants_hashes:" `B.append` pollid) >>= \case
             Right participants ->

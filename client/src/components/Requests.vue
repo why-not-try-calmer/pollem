@@ -738,6 +738,7 @@ export default {
     },
     methods: {
         switchToRestored(pollid) {
+            this.$toast.info("Retrieving poll data from server... Hang on tight!")
             return fetch(Requests.server_url[AppMode] + "/polls/" + pollid)
                 .then((res) => res.json())
                 .then((res) => {
@@ -957,6 +958,7 @@ export default {
                 .then((res) => this.$toast.success(res.resp_take_msg));
         },
         restoreHistory() {
+            this.$toast.info("Retrieving entire history from server... Hang on tight!")
             const payload = {
                 myhistory_hash: this.user.hash,
                 myhistory_token: this.user.token,
