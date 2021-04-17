@@ -84,6 +84,7 @@ toCleanB = B.init . B.tail . encodeStrict
 dbErr = pure . Left . R.Err Database $ mempty
 borked = pure . Left . R.Err BorkedData $ mempty
 noUser = pure . Left . R.Err UserNotExist $ mempty
+noPoll = pure. Left . R.Err PollNotExist $ mempty
 missingFrom keyvals tested = not $ all (`elem` tested) keyvals
 
 getPollsNb :: Redis (Either (Err T.Text) Int)
@@ -171,7 +172,7 @@ submit (STake hash token finger pollid answers) =
         ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
                         if missingFrom [("active","true")] pdata then pure . Left . R.Err PollInactive $ pollid_txt else
                         if missingFrom [("token", token),("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ decodeUtf8 hash else
-                        if isF || isH then pure . Left . R.Err PollTakenAlready $ pollid_txt else
+                        if isF || isH then pure . Left . R.Err PollTakenAlready $ mempty else
                             multiExec ( do
                             sadd ("participants_hashes:" `B.append` pollid) [hash]
                             sadd ("participants_fingerprints:" `B.append` pollid) [finger]
@@ -180,36 +181,35 @@ submit (STake hash token finger pollid answers) =
                                         _  -> pure . Left . R.Err Database $ "Database error"
                     _   -> pure . Left . R.Err Database $ "User or poll data missingFrom."
 
-getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Bool, Maybe [Int], Maybe B.ByteString  ))
+getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Bool, Maybe [Int], Maybe B.ByteString))
 getPoll (SGet pollid) =
     let pollid_txt = decodeUtf8 pollid
         key = ("poll:" `B.append` pollid)
-    in  exists key >>= \case
-        Left err -> dbErr
-        Right verdict ->
-            if not verdict then pure . Left . R.Err PollNotExist $ pollid_txt
-            else smembers ("participants_hashes:" `B.append` pollid) >>= \case
-                Right participants ->
-                    if null participants then hgetall ("poll:" `B.append` pollid) >>= \case
-                        Right poll_raw -> finish poll_raw Nothing
-                    else let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
-                    in  multiExec ( do
-                        answers <- collectAnswers
-                        poll_meta_data <- hgetall ("poll:" `B.append` pollid)
-                        pure $ (,) <$> answers <*> poll_meta_data
-                        )
-                    >>= \case
-                    TxError _ -> dbErr
-                    TxSuccess (res, poll_raw) ->
-                        let mb_decoded = sequence $ foldr decodeByteList [] res
-                        in  case mb_decoded of
-                            Just answers ->
-                                case collect answers of
-                                Left err -> pure . Left $ err
-                                Right collected ->
-                                    let scores = Just $ reverse collected
-                                    in  finish poll_raw scores
-                            Nothing -> borked
+    in  hgetall key >>= \case
+        Left _ -> dbErr
+        Right poll_raw ->
+            if null poll_raw then noPoll else
+            smembers ("participants_hashes:" `B.append` pollid) >>= \case
+            Right participants ->
+                if null participants then finish poll_raw Nothing
+                else let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
+                in  multiExec ( do
+                    answers <- collectAnswers
+                    poll_meta_data <- hgetall ("poll:" `B.append` pollid)
+                    pure $ (,) <$> answers <*> poll_meta_data
+                    )
+                >>= \case
+                TxError _ -> dbErr
+                TxSuccess (res, poll_raw) ->
+                    let mb_decoded = sequence $ foldr decodeByteList [] res
+                    in  case mb_decoded of
+                        Just answers ->
+                            case collect answers of
+                            Left err -> pure . Left $ err
+                            Right collected ->
+                                let scores = Just $ reverse collected
+                                in  finish poll_raw scores
+                        Nothing -> borked
     where   decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
             decodeByteList val acc = traverse (fmap fst . readInt) val : acc
             getAnswers p pollid =
