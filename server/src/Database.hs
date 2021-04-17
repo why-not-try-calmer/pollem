@@ -171,7 +171,7 @@ submit (STake hash token finger pollid answers) =
         ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
                         if missingFrom [("active","true")] pdata then pure . Left . R.Err PollInactive $ pollid_txt else
                         if missingFrom [("token", token),("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ decodeUtf8 hash else
-                        if isF || isH then pure . Left . R.Err PollTakenAlready $ pollid_txt else
+                        if isF || isH then pure . Left . R.Err PollTakenAlready $ mempty else
                             multiExec ( do
                             sadd ("participants_hashes:" `B.append` pollid) [hash]
                             sadd ("participants_fingerprints:" `B.append` pollid) [finger]

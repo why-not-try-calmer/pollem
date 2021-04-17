@@ -134,17 +134,18 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                     -- poll, scores, last accessed datetime, secret
                     Just (poll, active, mb_scores, _, mb_secret_stored) ->
                         if failsTest now poll mb_secret_stored then stop else
-                        if poll_visible poll || not active then goFetch pollid_b env now else do
+                        if poll_visible poll || not active then goFetchScores pollid_b env now else do
                             -- updating cache
                             updateCache env pollid_b now
                             finish poll mb_scores
                     Nothing -> liftIO (connDo (redisconn env) . getPoll $ SGet pollid_b) >>= \case
                         Left err -> stop
                         Right (poll, active, mb_scores, mb_secret_stored_b) ->
-                            if failsTest now poll (decodeUtf8 <$> mb_secret_stored_b) then stop else do
-                            -- adding to cache
-                            modifyMVar_ (pollcache env) (pure . HMS.insert pollid_b (poll, active, mb_scores, now, mb_secret_req))
-                            finish poll mb_scores
+                            let res = (poll, active, mb_scores, now, mb_secret_req)
+                            in if failsTest now poll (decodeUtf8 <$> mb_secret_stored_b) then stop else do
+                                -- adding to cache
+                                addToCache env res
+                                finish poll mb_scores
             where
                 pollid_b = encodeStrict pollid
                 mb_secret_req = T.pack <$> secret_req
@@ -155,12 +156,13 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                             Just b -> case isoOrCustom . T.unpack $ b of Right b_date -> a < b_date
                             _ -> False
                     in  running now (poll_endDate poll) && mismatch
-                goFetch pollid env now = liftIO (connDo (redisconn env) . getPoll $ SGet pollid) >>= \case
+                goFetchScores pollid env now = liftIO (connDo (redisconn env) . getPoll $ SGet pollid) >>= \case
                     Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
                     Right (poll, active, mb_scores, mb_secret) -> do
                         updateCache env pollid now
                         finish poll mb_scores
                 updateCache env pollid now = modifyMVar_ (pollcache env) (pure . HMS.update (\(a, b, c, _, e) -> Just (a, b, c, now, e)) pollid)
+                addToCache env (poll, active, mb_scores, now, mb_secret_req) = modifyMVar_ (pollcache env) (pure . HMS.insert pollid_b (poll, active, mb_scores, now, mb_secret_req))
                 err = R.Err R.BadSecret (mempty :: T.Text)
                 stop = pure $ RespGet (R.renderError err) Nothing Nothing
                 finish poll mb_scores = pure $ RespGet "Ok" (Just poll) mb_scores

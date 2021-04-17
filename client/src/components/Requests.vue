@@ -23,16 +23,16 @@
                     <p class="text-2xl">How this works</p>
                     <div class="text-left">
                         <p>
-                            * All polls are private by default. This means that to
-                            display the poll, you need to have created it or to
-                            access it from an url referencing a valid "secret"
-                            parameter value.
+                            * All polls are private by default. This means that
+                            to display the poll, you need to have created it or
+                            to access it from an url referencing a valid
+                            "secret" parameter value.
                         </p>
                         <p>
-                            * To share such a link, go to the "My polls" tab, and
-                            click on the "Share" button next to a poll you've
-                            created. It will copy the link to the clipboard. You
-                            can now share it at leisure.
+                            * To share such a link, go to the "My polls" tab,
+                            and click on the "Share" button next to a poll
+                            you've created. It will copy the link to the
+                            clipboard. You can now share it at leisure.
                         </p>
                         <p>
                             * Accessing a poll and displaying the results or
@@ -699,10 +699,7 @@ export default {
                             );
                         }
                         this.$toast.success(
-                            Replies.loaded +
-                                " Here is your poll. (" +
-                                res.resp_get_poll_msg +
-                                ")"
+                            Replies.loaded + "Here is your poll."
                         );
                     });
             });
