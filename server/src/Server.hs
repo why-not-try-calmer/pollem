@@ -133,16 +133,16 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                 case HMS.lookup pollid_b hmap of
                     -- poll, scores, last accessed datetime, secret
                     Just (poll, active, mb_scores, _, mb_secret_stored) ->
-                        if failsTest now poll mb_secret_stored then stop else
+                        if failsTest now poll mb_secret_stored then stopWith badsecret else
                         if poll_visible poll || not active then goFetchScores pollid_b env now else do
                             -- updating cache
                             updateCache env pollid_b now
                             finish poll mb_scores
                     Nothing -> liftIO (connDo (redisconn env) . getPoll $ SGet pollid_b) >>= \case
-                        Left err -> stop
+                        Left err -> stopWith err
                         Right (poll, active, mb_scores, mb_secret_stored_b) ->
                             let res = (poll, active, mb_scores, now, mb_secret_req)
-                            in if failsTest now poll (decodeUtf8 <$> mb_secret_stored_b) then stop else do
+                            in if failsTest now poll (decodeUtf8 <$> mb_secret_stored_b) then stopWith badsecret else do
                                 -- adding to cache
                                 addToCache env res
                                 finish poll mb_scores
@@ -163,8 +163,8 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                         finish poll mb_scores
                 updateCache env pollid now = modifyMVar_ (pollcache env) (pure . HMS.update (\(a, b, c, _, e) -> Just (a, b, c, now, e)) pollid)
                 addToCache env (poll, active, mb_scores, now, mb_secret_req) = modifyMVar_ (pollcache env) (pure . HMS.insert pollid_b (poll, active, mb_scores, now, mb_secret_req))
-                err = R.Err R.BadSecret (mempty :: T.Text)
-                stop = pure $ RespGet (R.renderError err) Nothing Nothing
+                badsecret = R.Err R.BadSecret (mempty :: T.Text)
+                stopWith err = pure $ RespGet (R.renderError err) Nothing Nothing
                 finish poll mb_scores = pure $ RespGet "Ok" (Just poll) mb_scores
 
         myhistory :: ReqMyHistory -> AppM RespMyHistory

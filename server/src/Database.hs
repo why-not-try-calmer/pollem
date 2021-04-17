@@ -84,6 +84,7 @@ toCleanB = B.init . B.tail . encodeStrict
 dbErr = pure . Left . R.Err Database $ mempty
 borked = pure . Left . R.Err BorkedData $ mempty
 noUser = pure . Left . R.Err UserNotExist $ mempty
+noPoll = pure. Left . R.Err PollNotExist $ mempty
 missingFrom keyvals tested = not $ all (`elem` tested) keyvals
 
 getPollsNb :: Redis (Either (Err T.Text) Int)
@@ -185,8 +186,10 @@ getPoll (SGet pollid) =
     let pollid_txt = decodeUtf8 pollid
         key = ("poll:" `B.append` pollid)
     in  hgetall key >>= \case
-        Left _ -> pure . Left . R.Err PollNotExist $ pollid_txt
-        Right poll_raw -> smembers ("participants_hashes:" `B.append` pollid) >>= \case
+        Left _ -> dbErr
+        Right poll_raw -> 
+            if null poll_raw then noPoll else
+            smembers ("participants_hashes:" `B.append` pollid) >>= \case
             Right participants ->
                 if null participants then finish poll_raw Nothing
                 else let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants

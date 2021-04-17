@@ -19,7 +19,7 @@ addToText v = T.append v . T.pack . show
 
 renderError :: (Show a) => Err a -> T.Text
 renderError (Err BadEmail v) = addToText "This email is not formatted property: " v
-renderError (Err BadSecret _) = "This poll is private but your secret does not match ours. Sorry."
+renderError (Err BadSecret _) = "Your secret does not match ours. Sorry."
 renderError (Err BorkedData _) = "Cannot work on this probably corrupted data."
 renderError (Err Custom v) = addToText mempty v
 renderError (Err Database _) = "Database error: Couldn't satisfy server request."
