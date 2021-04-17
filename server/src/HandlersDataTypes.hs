@@ -123,7 +123,7 @@ $(deriveJSON defaultOptions ''RespMyHistory)
 --
 type PollCreator = MVar (Int, SystemDRG)
 
-type PollCache = MVar (HMS.HashMap B.ByteString (Poll, Maybe [Int], UTCTime, Maybe T.Text))
+type PollCache = MVar (HMS.HashMap B.ByteString (Poll, Bool, Maybe [Int], UTCTime, Maybe T.Text))
 
 initState :: IO PollCreator
 initState = do

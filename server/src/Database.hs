@@ -171,7 +171,7 @@ submit (STake hash token finger pollid answers) =
         ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
                         if missingFrom [("active","true")] pdata then pure . Left . R.Err PollInactive $ pollid_txt else
                         if missingFrom [("token", token),("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ decodeUtf8 hash else
-                        if isF || isH then pure . Left . R.Err PollTakenAlready $ pollid_txt else 
+                        if isF || isH then pure . Left . R.Err PollTakenAlready $ pollid_txt else
                             multiExec ( do
                             sadd ("participants_hashes:" `B.append` pollid) [hash]
                             sadd ("participants_fingerprints:" `B.append` pollid) [finger]
@@ -180,7 +180,7 @@ submit (STake hash token finger pollid answers) =
                                         _  -> pure . Left . R.Err Database $ "Database error"
                     _   -> pure . Left . R.Err Database $ "User or poll data missingFrom."
 
-getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Maybe [Int], Maybe B.ByteString  ))
+getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Bool, Maybe [Int], Maybe B.ByteString  ))
 getPoll (SGet pollid) =
     let pollid_txt = decodeUtf8 pollid
         key = ("poll:" `B.append` pollid)
@@ -191,14 +191,7 @@ getPoll (SGet pollid) =
             else smembers ("participants_hashes:" `B.append` pollid) >>= \case
                 Right participants ->
                     if null participants then hgetall ("poll:" `B.append` pollid) >>= \case
-                        Right poll_raw ->
-                            let poll_metadata = HMS.fromList poll_raw
-                                mb_secret = HMS.lookup "secret" poll_metadata
-                            in  case HMS.lookup "recipe" poll_metadata of
-                                    Nothing -> borked
-                                    Just recipe -> case decodeStrict recipe :: Maybe Poll of
-                                        Nothing -> borked
-                                        Just poll -> pure . Right $ (poll, Nothing, mb_secret)
+                        Right poll_raw -> finish poll_raw Nothing
                     else let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
                     in  multiExec ( do
                         answers <- collectAnswers
@@ -214,18 +207,23 @@ getPoll (SGet pollid) =
                                 case collect answers of
                                 Left err -> pure . Left $ err
                                 Right collected ->
-                                    let poll_metadata = HMS.fromList poll_raw
-                                    in  case HMS.lookup "recipe" poll_metadata of
-                                        Nothing -> borked
-                                        Just recipe -> case decodeStrict recipe :: Maybe Poll of
-                                            Nothing -> borked
-                                            Just poll -> pure . Right $ (poll, Just $ reverse collected, HMS.lookup "secret" poll_metadata)
+                                    let scores = Just $ reverse collected
+                                    in  finish poll_raw scores
                             Nothing -> borked
     where   decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
             decodeByteList val acc = traverse (fmap fst . readInt) val : acc
             getAnswers p pollid =
                 let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
                 in  lrange key 0 (-1)
+            finish poll_raw mb_scores =
+                let poll_metadata = HMS.fromList poll_raw
+                    mb_secret = HMS.lookup "secret" poll_metadata
+                    active = Just "true" == HMS.lookup "active" poll_metadata
+                in  case HMS.lookup "recipe" poll_metadata of
+                        Nothing -> borked
+                        Just recipe -> case decodeStrict recipe :: Maybe Poll of
+                            Nothing -> borked
+                            Just poll -> pure . Right $ (poll, active, mb_scores, mb_secret)
 
 getResults :: Redis (Either (Err T.Text) [(B.ByteString, B.ByteString)])
 getResults = smembers "polls" >>= \case

@@ -16,6 +16,7 @@ import qualified ErrorsReplies            as R
 import           HandlersDataTypes        (PollCache, initCache)
 import           Times                    (fresherThanOneMonth, getNow,
                                            isoOrCustom)
+import Data.Foldable (foldl')
 
 sweeperWorker :: Connection -> PollCache -> IO ()
 sweeperWorker conn mvar = do
@@ -23,17 +24,17 @@ sweeperWorker conn mvar = do
     now <- getNow
     res <- connDo conn $ getResults >>= \case
         Right pollidDate ->
-            let accOutdated (i, d) acc = case isoOrCustom . show $ d of
+            let accOutdated acc (i, d) = case isoOrCustom . show $ d of
                     Left notParsed -> acc
                     Right valid_date -> if valid_date > now then i : acc else acc
-                collectedActiveOutdated = foldr accOutdated [] pollidDate
+                collectedActiveOutdated = foldl' accOutdated [] pollidDate
             {- disable every poll whose endDate is in the past -}
             in  disablePolls collectedActiveOutdated
     case res of
         Left err  -> print . R.renderError $ err
         Right msg -> print . R.renderOk $ msg
     {- purges cache from every entry that is more than 1-month old -}
-    modifyMVar_ mvar $ pure . HMS.filter (\(_,_,date, _) -> fresherThanOneMonth now date)
+    modifyMVar_ mvar $ pure . HMS.filter (\(_,_,_,date, _) -> fresherThanOneMonth now date)
 
 runSweeperWorker :: PollCache -> Connection -> IO (Async())
 runSweeperWorker mvar conn =
