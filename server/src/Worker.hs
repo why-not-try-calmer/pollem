@@ -31,7 +31,7 @@ autoClose conn mvar = do
                     Right valid_date -> if valid_date > now then i : acc else acc
                 collectedActiveOutdated = foldl' accOutdated [] pollidDate
             in  do
-                {- disable & notifiy on disabled every poll whose endDate is in the past -}
+                {- disable & notify on disabled every poll whose endDate is in the past -}
                 disabled <- disableNotifyPolls collectedActiveOutdated
                 {- notifies all participants -}
                 notified <- notifyOnDisable collectedActiveOutdated

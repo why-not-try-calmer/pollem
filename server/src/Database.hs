@@ -309,8 +309,11 @@ getMyPollsData hash = getTakenCreated hash >>= \case
         collectPoll i = hgetall ("poll:" `B.append` i)
 
 notifyOnDisable :: [B.ByteString] -> Redis (Either (Err T.Text) (Ok T.Text))
-notifyOnDisable pollids = traverse getMetaScoresNotify pollids >>= (\case
-    Right _ -> pure . Right $ R.Ok mempty) . sequence
+notifyOnDisable pollids = traverse getMetaScoresNotify pollids >>=
+    (\case
+        Left _  -> dbErr
+        Right _ -> pure . Right . R.Ok $ ""
+    ) . sequence
     where
         config = initSendgridConfig
         emailOne pollid meta_data recipients =
@@ -321,6 +324,10 @@ notifyOnDisable pollids = traverse getMetaScoresNotify pollids >>= (\case
                 poll = case mb_poll of Just p -> p
             in  sendEmail $ emailNotifyOnClose config recipients poll author scores
         getMetaScoresNotify pollid = do
-            meta_data <- getPollMetaScores pollid >>= \case Right res -> pure res
-            recipients <- smembers ("participants_email" `B.append` pollid) >>= \case Right res -> pure res
-            liftIO (emailOne pollid meta_data recipients)
+            meta <- getPollMetaScores pollid
+            recipients <- smembers ("participants_email" `B.append` pollid)
+            case meta of
+                Left _ -> dbErr
+                Right meta' -> case recipients of
+                    Left _ -> dbErr
+                    Right recipients' -> liftIO $ emailOne pollid meta' recipients'
