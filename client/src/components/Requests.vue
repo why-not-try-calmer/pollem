@@ -332,7 +332,7 @@
                         <div
                             v-for="(p, k) in mypolls"
                             :key="k"
-                            class="grid grid-cols-6 gap-1"
+                            class="grid grid-cols-7 gap-1"
                         >
                             <div>
                                 <a href="#" @click="switchToRestored(p.pollid)">
@@ -376,6 +376,9 @@
                             <div>{{ p.startDate }}</div>
                             <div>
                                 {{ p.endDate !== null || "No end date" }}
+                            </div>
+                            <div>
+                                <button class="mt-2 p-1 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75" @click="closePoll(p.pollid)"></button>
                             </div>
                         </div>
                     </div>
@@ -511,6 +514,7 @@ const Requests = {
                     "take_hash",
                     "take_token",
                     "take_results",
+                    "take_email"
                 ],
                 resp: ["resp_take_msg"],
             },
@@ -931,11 +935,11 @@ export default {
                     this.user.created.push(createdPoll);
                 });
         },
-        closePoll() {
+        closePoll(pollid) {
             const payload = {
                 close_hash: this.user.hash,
                 close_token: this.user.token,
-                close_pollid: PollId.toString(),
+                close_pollid: pollid,
             };
             return Requests.makeReq("post", "close", payload)
                 .catch((err) => this.$toast.error(err))
@@ -952,6 +956,7 @@ export default {
                         : 0
                 ),
                 take_pollid: PollId.toString(),
+                take_email: this.user.email
             };
             return Requests.makeReq("post", "take", payload)
                 .catch((err) => this.$toast.error(err))

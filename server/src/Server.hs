@@ -41,7 +41,7 @@ type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
     "confirm_token" :> ReqBody '[JSON] ReqConfirmToken :> Post '[JSON] RespConfirmToken :<|>
     "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespCreate :<|>
-    -- "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
+    "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
     "polls" :> Capture "id" Int :> QueryParam "secret" String :> Get '[JSON] RespGet :<|>
     "myhistory" :> ReqBody '[JSON] ReqMyHistory :> Post '[JSON] RespMyHistory :<|>
     "take" :> ReqBody '[JSON] ReqTake :> Post '[JSON] RespTake :<|>
@@ -51,7 +51,7 @@ api :: Proxy API
 api = Proxy
 
 server :: ServerT API AppM
-server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|> myhistory :<|> take :<|> warmup
+server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhistory :<|> take :<|> warmup
     where
         ask_token :: ReqAskToken -> AppM RespAskToken
         ask_token (ReqAskToken email) = do
