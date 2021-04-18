@@ -269,6 +269,7 @@ getTakenCreated hash = smembers "polls" >>= \case
         filterOnAuthor ids ls = HMS.keys . HMS.filter (elem hash) . HMS.fromList . zip ids $ ls
 
 getMyPollsData :: B.ByteString -> Redis (Either (Err T.Text) (HMS.HashMap T.Text [(T.Text, T.Text)], [T.Text], [T.Text]))
+{- Returns hashmap of all poll ids into pair of (bytestring maps of) polls taken, polls created -}
 getMyPollsData hash = getTakenCreated hash >>= \case
     Right (taken, created) ->
         let both = taken ++ created
