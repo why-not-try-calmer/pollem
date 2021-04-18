@@ -11,13 +11,14 @@ import           Control.Monad.IO.Class   (liftIO)
 import           Data.Foldable            (foldl')
 import qualified Data.HashMap.Strict      as HMS
 import           Database                 (_connDo, connDo, disableNotifyPolls,
-                                           getPollIdEndDate, initRedisConnection, notifyOnDisable)
+                                           getPollIdEndDate,
+                                           initRedisConnection, notifyOnDisable)
 import           Database.Redis           (Connection, info, keys, runRedis)
 import qualified ErrorsReplies            as R
 import           HandlersDataTypes        (PollCache, initCache)
+import           Mailer                   (SendGridConfig, SendGridEmail)
 import           Times                    (fresherThanOneMonth, getNow,
                                            isoOrCustom)
-import Mailer (SendGridConfig, SendGridEmail)
 
 autoClose :: Connection -> PollCache -> IO ()
 autoClose conn mvar = do
@@ -35,8 +36,8 @@ autoClose conn mvar = do
                 notified <- notifyOnDisable collectedActiveOutdated
                 pure $ sequenceA [disabled, notified]
     case res of
-        Left err  -> print . R.renderError $ err
-        Right _ -> print "Disabled and notified"
+        Left err -> print . R.renderError $ err
+        Right _  -> print "Disabled and notified"
     {- purges cache from every entry that is more than 1-month old -}
     modifyMVar_ mvar $ pure . HMS.filter (\(_,_,_,date, _) -> fresherThanOneMonth now date)
 
