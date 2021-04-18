@@ -12,6 +12,7 @@ import           Data.Aeson             (decodeStrict)
 import           Data.Aeson.Extra       (encodeStrict)
 import qualified Data.ByteString        as B
 import           Data.ByteString.Char8  (readInt, unsnoc)
+import           Data.Foldable          (traverse_, sequenceA_)
 import qualified Data.HashMap.Strict    as HMS
 import           Data.Maybe
 import qualified Data.Text              as T
@@ -21,6 +22,7 @@ import           ErrorsReplies
 import qualified ErrorsReplies          as R
 import           HandlersDataTypes
 import           Times                  (getNow)
+import Mailer (initSendgridConfig, emailNotifyOnClose, sendEmail)
 --
 
 {-- Requests to db: types --}
@@ -183,6 +185,23 @@ submit (STake hash token finger pollid answers) =
                                         _  -> pure . Left . R.Err Database $ "Database error"
                     _   -> pure . Left . R.Err Database $ "User or poll data missingFrom."
 
+getAnswers p pollid =
+    let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
+    in  lrange key 0 (-1)
+
+getPollMetaScores :: B.ByteString -> Redis (Either (Err T.Text) ([[B.ByteString]], [(B.ByteString, B.ByteString)]))
+getPollMetaScores pollid = smembers ("participants_hashes:" `B.append` pollid) >>= \case
+    Left _ -> dbErr
+    Right participants ->
+        let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
+        in  multiExec ( do
+                answers <- collectAnswers
+                poll_meta_data <- hgetall ("poll:" `B.append` pollid)
+                pure $ (,) <$> answers <*> poll_meta_data
+            ) >>= \case
+                TxError _ -> dbErr
+                TxSuccess (answers, poll_meta_data) -> pure $ Right (answers, poll_meta_data)
+
 getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Bool, Maybe [Int], Maybe B.ByteString))
 getPoll (SGet pollid) =
     let pollid_txt = decodeUtf8 pollid
@@ -214,9 +233,6 @@ getPoll (SGet pollid) =
                         Nothing -> borked
     where   decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
             decodeByteList val acc = traverse (fmap fst . readInt) val : acc
-            getAnswers p pollid =
-                let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
-                in  lrange key 0 (-1)
             finish poll_raw mb_scores =
                 let poll_metadata = HMS.fromList poll_raw
                     mb_secret = HMS.lookup "secret" poll_metadata
@@ -227,8 +243,8 @@ getPoll (SGet pollid) =
                             Nothing -> borked
                             Just poll -> pure . Right $ (poll, active, mb_scores, mb_secret)
 
-getResults :: Redis (Either (Err T.Text) [(B.ByteString, B.ByteString)])
-getResults = smembers "polls" >>= \case
+getPollIdEndDate :: Redis (Either (Err T.Text) [(B.ByteString, B.ByteString)])
+getPollIdEndDate = smembers "polls" >>= \case
     Left _ -> dbErr
     Right ids -> traverse collectEndifExists ids >>= \res -> pure . Right . catMaybes $ res
     where
@@ -241,12 +257,15 @@ getResults = smembers "polls" >>= \case
                     Nothing -> pure Nothing
                     Just e  -> pure . Just $ (pollid, e)
 
-disablePolls :: [B.ByteString] -> Redis (Either (Err T.Text) (Ok T.Text))
-disablePolls [] = pure . Right . R.Ok $ "No poll to disable"
-disablePolls ls = multiExec (sequence_ <$> traverse disablePoll ls) >>= \case
+disableNotifyPolls :: [B.ByteString] -> Redis (Either (Err T.Text) (Ok T.Text))
+disableNotifyPolls [] = pure . Right . R.Ok $ "No poll to disable"
+disableNotifyPolls ls = multiExec (sequence <$> traverse disablePoll ls) >>= \case
     TxError _ -> dbErr
-    TxSuccess _ -> pure . Right . R.Ok $ "Disabled these outdated polls: " `T.append` (T.concat . map decodeUtf8 $ ls)
-    where   disablePoll l = hset ("poll:" `B.append` l) "active" "false"
+    TxSuccess toNotify -> pure . Right . R.Ok $ "Disabled these outdated polls: " `T.append` (T.concat . map decodeUtf8 $ ls)
+    where
+        disablePoll l =
+            let key = ("poll:" `B.append` l)
+            in  hset key "active" "false"
 
 getTakenCreated :: B.ByteString -> Redis (Either (Err T.Text) ([B.ByteString], [B.ByteString]))
 getTakenCreated hash = smembers "polls" >>= \case
@@ -285,3 +304,20 @@ getMyPollsData hash = getTakenCreated hash >>= \case
             TxError err -> pure . Left . R.Err R.Custom $ T.pack err
     where
         collectPoll i = hgetall ("poll:" `B.append` i)
+
+notifyOnDisable :: [B.ByteString] -> Redis (Either (Err T.Text) (Ok T.Text))
+notifyOnDisable pollids = traverse getMetaScoresNotify pollids >>= (\case
+    Right _ -> pure . Right $ R.Ok mempty) . sequence
+    where
+        config = initSendgridConfig
+        emailOne pollid meta_data recipients =
+            let (scores, poll_meta_data) = meta_data
+                hmap = HMS.fromList poll_meta_data
+                author = fromMaybe "" $ HMS.lookup "author" hmap
+                mb_poll = decodeStrict =<< HMS.lookup "recipe" hmap :: Maybe Poll
+                poll = case mb_poll of Just p -> p
+            in  sendEmail $ emailNotifyOnClose config recipients poll author scores
+        getMetaScoresNotify pollid = do
+            meta_data <- getPollMetaScores pollid >>= \case Right res -> pure res
+            recipients <- smembers ("participants_email" `B.append` pollid) >>= \case Right res -> pure res
+            liftIO (emailOne pollid meta_data recipients)

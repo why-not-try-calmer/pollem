@@ -66,7 +66,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                 token <- createCrypto gen (toCleanB . show $ now)
                 let token_b = toCleanB token
                 putMVar mvar (n, gen)
-                sendEmail (makeSendGridEmail (sendgridconf env) token_b email_b) >>= \case
+                sendEmail (emailToken (sendgridconf env) token_b email_b) >>= \case
                     Right _ -> connDo (redisconn env) . submit $ asksubmit token_b
             case res of
                 Left err  -> pure . RespAskToken . R.renderError $ err
@@ -233,6 +233,6 @@ startApp = do
     let config = Config initSendgridConfig connector state cache
     {- running -}
     print "Worker started..."
-    runSweeperWorker cache connector
+    runAutoClose connector cache
     print $ "Server starting on port " ++ show port
     run port $ corsPolicy (app config)
