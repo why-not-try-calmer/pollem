@@ -8,6 +8,7 @@ import           Control.Concurrent.Async
 import           Control.Exception
 import           Control.Monad
 import           Control.Monad.IO.Class   (liftIO)
+import           Data.Foldable            (foldl')
 import qualified Data.HashMap.Strict      as HMS
 import           Database                 (_connDo, connDo, disablePolls,
                                            getResults, initRedisConnection)
@@ -16,10 +17,9 @@ import qualified ErrorsReplies            as R
 import           HandlersDataTypes        (PollCache, initCache)
 import           Times                    (fresherThanOneMonth, getNow,
                                            isoOrCustom)
-import Data.Foldable (foldl')
 
-sweeperWorker :: Connection -> PollCache -> IO ()
-sweeperWorker conn mvar = do
+autoClose :: Connection -> PollCache -> IO ()
+autoClose conn mvar = do
     print "Attempting to sweep..."
     now <- getNow
     res <- connDo conn $ getResults >>= \case
@@ -38,7 +38,7 @@ sweeperWorker conn mvar = do
 
 runSweeperWorker :: PollCache -> Connection -> IO (Async())
 runSweeperWorker mvar conn =
-    let sweep = sweeperWorker conn mvar
+    let sweep = autoClose conn mvar
     in  async . forever $ do
         sweep
         print "Swept once and now sleeping for one hour."

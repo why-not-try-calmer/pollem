@@ -152,6 +152,8 @@ submit (SClose hash token pollid) =
             pure $ (,) <$> polldata <*> userdata
         ) >>= \case
             TxSuccess (pdata, udata) ->
+                if null pdata then noPoll else
+                if null udata then noUser else
                 if missingFrom [("active","true"), ("author_hash", hash)] pdata then pure . Left . R.Err Custom
                     $ "Either the poll was closed already, or you don't have closing rights." else
                 if missingFrom [("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ mempty
@@ -244,8 +246,7 @@ disablePolls [] = pure . Right . R.Ok $ "No poll to disable"
 disablePolls ls = multiExec (sequence_ <$> traverse disablePoll ls) >>= \case
     TxError _ -> dbErr
     TxSuccess _ -> pure . Right . R.Ok $ "Disabled these outdated polls: " `T.append` (T.concat . map decodeUtf8 $ ls)
-    where
-        disablePoll l = hset ("poll:" `B.append` l) "active" "false"
+    where   disablePoll l = hset ("poll:" `B.append` l) "active" "false"
 
 getTakenCreated :: B.ByteString -> Redis (Either (Err T.Text) ([B.ByteString], [B.ByteString]))
 getTakenCreated hash = smembers "polls" >>= \case

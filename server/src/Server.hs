@@ -114,7 +114,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
             where
                 stopOn err = pure $ RespCreate (R.renderError err) Nothing Nothing
 
-        {-close :: ReqClose -> AppM RespClose
+        close :: ReqClose -> AppM RespClose
         close (ReqClose hash token pollid) = do
             let hash_b = encodeUtf8 hash
                 token_b = encodeUtf8 token
@@ -122,7 +122,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
             env <- ask
             liftIO (connDo (redisconn env) . submit $ SClose hash_b token_b pollid_b) >>= \case
                 Left err -> pure . RespClose . R.renderError $ err
-                Right ok -> pure $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)-}
+                Right ok -> pure $ RespClose "Poll closed"
 
         get :: Int -> Maybe String -> AppM RespGet
         get pollid secret_req = do
@@ -133,7 +133,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                 case HMS.lookup pollid_b hmap of
                     -- poll, scores, last accessed datetime, secret
                     Just (poll, active, mb_scores, _, mb_secret_stored) ->
-                        if failsTest now poll mb_secret_stored then stopWith badsecret else
+                        if runningButMissing now poll mb_secret_stored then stopWith badsecret else
                         if poll_visible poll || not active then goFetchScores pollid_b env now else do
                             -- updating cache
                             updateCache env pollid_b now
@@ -142,14 +142,14 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                         Left err -> stopWith err
                         Right (poll, active, mb_scores, mb_secret_stored_b) ->
                             let res = (poll, active, mb_scores, now, mb_secret_req)
-                            in if failsTest now poll (decodeUtf8 <$> mb_secret_stored_b) then stopWith badsecret else do
+                            in if runningButMissing now poll (decodeUtf8 <$> mb_secret_stored_b) then stopWith badsecret else do
                                 -- adding to cache
                                 addToCache env res
                                 finish poll mb_scores
             where
                 pollid_b = encodeStrict pollid
                 mb_secret_req = T.pack <$> secret_req
-                failsTest now poll mb_secret_stored =
+                runningButMissing now poll mb_secret_stored =
                     let mismatch = fromMaybe False $ (/=) <$> mb_secret_req <*> mb_secret_stored
                         running a Nothing = False
                         running a mb_b = case poll_endDate poll of
