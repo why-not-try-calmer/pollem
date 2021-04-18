@@ -120,9 +120,12 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 token_b = encodeUtf8 token
                 pollid_b = encodeUtf8 pollid
             env <- ask
-            liftIO (connDo (redisconn env) . submit $ SClose hash_b token_b pollid_b) >>= \case
+            let conn = redisconn env
+            liftIO (connDo conn . submit $ SClose hash_b token_b pollid_b) >>= \case
                 Left err -> pure . RespClose . R.renderError $ err
-                Right ok -> pure $ RespClose "Poll closed"
+                Right _ -> liftIO (connDo conn . notifyOnDisable $ [pollid_b]) >>= \case
+                    Left err -> pure . RespClose $ R.renderError err
+                    Right _  -> pure $ RespClose "Poll closed"
 
         get :: Int -> Maybe String -> AppM RespGet
         get pollid secret_req = do
