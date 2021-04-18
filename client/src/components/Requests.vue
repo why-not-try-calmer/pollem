@@ -377,8 +377,8 @@
                             <div>
                                 {{ p.endDate !== null || "No end date" }}
                             </div>
-                            <div>
-                                <button class="mt-2 p-1 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75" @click="closePoll(p.pollid)"></button>
+                            <div v-if="p.active">
+                                <button class="p-1 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75" @click="closePoll(p.pollid)">Close poll</button>
                             </div>
                         </div>
                     </div>
@@ -982,11 +982,13 @@ export default {
                             const poll = JSON.parse(entry[2][1]);
                             const startDate = new Date(poll.poll_startDate);
                             const secret = entry[1][1];
+                            const active = JSON.parse(entry[3][1])
                             const excerpt = {
                                 question: poll.poll_question,
                                 startDate,
                                 secret,
                                 pollid: k,
+                                active
                             };
                             if (poll.poll_endDate !== null)
                                 excerpt.endDate = new Date(poll.poll_endDate);
