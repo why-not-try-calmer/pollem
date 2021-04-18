@@ -12,7 +12,7 @@ import           Data.Aeson             (decodeStrict)
 import           Data.Aeson.Extra       (encodeStrict)
 import qualified Data.ByteString        as B
 import           Data.ByteString.Char8  (readInt, unsnoc)
-import           Data.Foldable          (traverse_, sequenceA_)
+import           Data.Foldable          (sequenceA_, traverse_)
 import qualified Data.HashMap.Strict    as HMS
 import           Data.Maybe
 import qualified Data.Text              as T
@@ -21,8 +21,9 @@ import           Database.Redis
 import           ErrorsReplies
 import qualified ErrorsReplies          as R
 import           HandlersDataTypes
+import           Mailer                 (emailNotifyOnClose, initSendgridConfig,
+                                         sendEmail)
 import           Times                  (getNow)
-import Mailer (initSendgridConfig, emailNotifyOnClose, sendEmail)
 --
 
 {-- Requests to db: types --}
@@ -56,6 +57,7 @@ data DbReq =
         answers_hash        :: B.ByteString,
         answers_token       :: B.ByteString,
         answers_fingerprint :: B.ByteString,
+        answers_emai        :: B.ByteString,
         answers_poll_id     :: B.ByteString,
         answers_answers     :: [B.ByteString]
     } |
@@ -164,7 +166,7 @@ submit (SClose hash token pollid) =
                 pure . Right . R.Ok $ "This poll was closed: " `T.append` pollid_txt
             _ -> pure . Left . R.Err PollNotExist $ pollid_txt
 
-submit (STake hash token finger pollid answers) =
+submit (STake hash token finger email pollid answers) =
     let pollid_txt = decodeUtf8 pollid
         userKey = "user:" `B.append` hash
     in  multiExec ( do
@@ -177,12 +179,13 @@ submit (STake hash token finger pollid answers) =
                         if missingFrom [("active","true")] pdata then pure . Left . R.Err PollInactive $ pollid_txt else
                         if missingFrom [("token", token),("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ decodeUtf8 hash else
                         if isF || isH then pure . Left . R.Err PollTakenAlready $ mempty else
-                            multiExec ( do
-                            sadd ("participants_hashes:" `B.append` pollid) [hash]
-                            sadd ("participants_fingerprints:" `B.append` pollid) [finger]
-                            lpush ("answers:" `B.append` pollid `B.append` ":" `B.append` hash) answers
-                            ) >>= \case TxSuccess _ -> pure . Right . R.Ok $ "Answers submitted successfully!"
-                                        _  -> pure . Left . R.Err Database $ "Database error"
+                                multiExec ( do
+                                sadd ("participants_hashes:" `B.append` pollid) [hash]
+                                sadd ("participants_fingerprints:" `B.append` pollid) [finger]
+                                sadd ("participants_email:" `B.append` pollid) [email]
+                                lpush ("answers:" `B.append` pollid `B.append` ":" `B.append` hash) answers
+                                ) >>= \case TxSuccess _ -> pure . Right . R.Ok $ "Answers submitted successfully!"
+                                            _  -> pure . Left . R.Err Database $ "Database error"
                     _   -> pure . Left . R.Err Database $ "User or poll data missingFrom."
 
 getAnswers p pollid =

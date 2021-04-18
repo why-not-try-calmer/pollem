@@ -61,6 +61,7 @@ data ReqTake = ReqTake {
     take_hash        :: T.Text,
     take_token       :: T.Text,
     take_fingerprint :: T.Text,
+    take_email       :: T.Text,
     take_pollid      :: T.Text,
     take_results     :: [Int]
 } deriving (Eq, Show)
