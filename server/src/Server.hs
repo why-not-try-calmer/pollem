@@ -85,8 +85,9 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 Right msg -> pure $ RespConfirmToken (R.renderOk msg) (Just . decodeUtf8 $ hashed) (Just token)
 
         create :: ReqCreate -> AppM RespCreate
-        create (ReqCreate hash token recipe startDate endDate) = do
+        create (ReqCreate hash email token recipe startDate endDate) = do
             let hash_b = encodeUtf8 hash
+                email_b = encodeUtf8 email
                 token_b = encodeUtf8 token
                 recipe_b = encodeUtf8 recipe
                 startDate_b = encodeUtf8 startDate
@@ -108,7 +109,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                         secret <- produceSecret
                         case isoOrCustom . T.unpack $ startDate of
                             Left _ -> pure $ RespCreate (R.renderError (R.Err R.DatetimeFormat (mempty :: T.Text))) Nothing Nothing
-                            Right date -> liftIO (connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b mb_endDate_b secret) >>=
+                            Right date -> liftIO (connDo (redisconn env) . submit $ SCreate hash_b email_b token_b pollid recipe_b startDate_b mb_endDate_b secret) >>=
                                 \case   Left err -> stopOn err
                                         Right msg -> pure $ RespCreate (R.renderOk msg) (Just $ total + 1) (Just . decodeUtf8 $ secret)
             where

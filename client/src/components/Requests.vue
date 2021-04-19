@@ -134,14 +134,14 @@
                     </div>
                 </tab>
                 <tab title="Take the poll">
-                    <div v-if="displayed.poll_startDate" class="mt-10">
+                    <div v-if="displayed.startDate" class="mt-10">
                         <div id="displayed" class="flex flex-col">
                             <div>
                                 <textarea
                                     id="takingQuestion"
                                     rows="2"
                                     cols="30"
-                                    :value="displayed.poll_question"
+                                    :value="displayed.question"
                                     disabled
                                 />
                             </div>
@@ -150,8 +150,7 @@
                                 :style="chartStyle"
                                 ref="chart"
                                 v-if="
-                                    chart.scores.length > 0 &&
-                                    displayed.poll_visible
+                                    chart.scores.length > 0 && displayed.visible
                                 "
                             />
                             <div>
@@ -159,14 +158,11 @@
                                     id="takingDescription"
                                     rows="3"
                                     cols="45"
-                                    :value="displayed.poll_description"
+                                    :value="displayed.description"
                                     disabled
                                 />
                             </div>
-                            <div
-                                v-for="(a, k) in displayed.poll_results"
-                                :key="k"
-                            >
+                            <div v-for="(a, k) in displayed.results" :key="k">
                                 <div>
                                     <label>{{ a.text }}</label>
                                     <input
@@ -185,7 +181,7 @@
                                     class="mx-3 mr-5"
                                     type="checkbox"
                                     id="takingMultiple"
-                                    :checked="displayed.poll_multiple"
+                                    :checked="displayed.multiple"
                                     disabled
                                 />
                                 <label for="takingVisible"
@@ -195,7 +191,7 @@
                                     class="mx-3 mr-5"
                                     type="checkbox"
                                     id="takingVisible"
-                                    :checked="displayed.poll_visible"
+                                    :checked="displayed.visible"
                                     disabled
                                 />
                             </div>
@@ -206,17 +202,17 @@
                                 <input
                                     type="text"
                                     id="takingStartDate"
-                                    :value="displayed.poll_startDate"
+                                    :value="displayed.startDate"
                                     disabled
                                 />
-                                <div v-if="displayed.poll_endDate">
+                                <div v-if="displayed.endDate">
                                     <label class="space-y-3" for="takingEndDate"
                                         >(optional) Poll due to close at:</label
                                     >
                                     <input
                                         type="text"
                                         id="takingEndDate"
-                                        :value="displayed.poll_endDate"
+                                        :value="displayed.endDate"
                                         disabled
                                     />
                                 </div>
@@ -317,7 +313,14 @@
                             <datepicker
                                 id="creatingEndDate"
                                 v-model="creatingPoll.endDate"
-                            />
+                                @click="incDate"
+                            /><button
+                                v-if="creatingPoll.endDate"
+                                class="p-1 w-1/8 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
+                                @click="creatingPoll.endDate = null"
+                            >
+                                reset end date
+                            </button>
                         </div>
                     </div>
                     <button
@@ -373,13 +376,23 @@
                                     "
                                 />
                             </div>
-                            <div>{{ p.startDate }}</div>
+                            <div>{{ dateFormattedString(p.startDate) }}</div>
                             <div>
-                                {{ p.endDate !== null || "No end date" }}
+                                {{
+                                    p.endDate !== null
+                                        ? dateFormattedString(p.endDate)
+                                        : "No end date"
+                                }}
                             </div>
-                            <div v-if="p.active">
-                                <button class="p-1 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75" @click="closePoll(p.pollid)">Close poll</button>
+                            <div v-if="p.isActive">
+                                <button
+                                    class="p-1 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:ring-opacity-75"
+                                    @click="closePoll(p.pollid)"
+                                >
+                                    Close poll
+                                </button>
                             </div>
+                            <div v-else>Closed or expired.</div>
                         </div>
                     </div>
                     <div class="mt-5">
@@ -412,9 +425,11 @@
         <li>Email {{ user.email }}</li>
         <li>Token {{ user.token }}</li>
         <li>Fingerprint {{ user.fingerprint }}</li>
+        <li>Displayed {{ displayed }}</li>
         <li>Taken: {{ user.taken }}</li>
         <li>Created: {{ user.created }}</li>
         <li>MyPoll: {{ mypolls }}</li>
+        <li>Creating: {{ creatingPoll }}</li>
     </ul>
 </template>
 
@@ -488,6 +503,7 @@ const Requests = {
             create: {
                 req: [
                     "create_hash",
+                    "create_email",
                     "create_token",
                     "create_recipe",
                     "create_startDate",
@@ -514,7 +530,7 @@ const Requests = {
                     "take_hash",
                     "take_token",
                     "take_results",
-                    "take_email"
+                    "take_email",
                 ],
                 resp: ["resp_take_msg"],
             },
@@ -664,7 +680,10 @@ export default {
                 }
                 const x = Math.floor(Math.random() * this.bees_facts.length);
                 this.todayFact = this.bees_facts[x];
-                this.creatingPoll.startDate = new Date();
+
+                const start = new Date();
+                this.creatingPoll.startDate = start;
+
                 // ------------- Warming up server ------------
                 // exiting loading if we're are not GET-ing any poll
                 if (PollId === null) {
@@ -683,16 +702,19 @@ export default {
                             Requests.valid_keys.get.polls.resp
                         );
                         const poll = res.resp_get_poll;
-                        this.displayed = Object.assign(this.displayed, poll);
-                        if (!poll.poll_endDate)
-                            this.displayed.poll_endDate = null;
-                        if (this.displayed.answers)
-                            this.displayed.answers = poll.poll_answers.map(
-                                (a) => ({
-                                    text: a,
-                                    value: false,
-                                })
-                            );
+                        this.displayed.startDate = poll.poll_startDate;
+                        this.displayed.multiple = poll.poll_multiple;
+                        this.displayed.visible = poll.poll_visible;
+                        this.displayed.question = poll.poll_question;
+                        this.displayed.description = poll.poll_description;
+                        this.displayed.endDate = !poll.poll_endDate
+                            ? null
+                            : poll.poll_endDate;
+                        this.displayed.answers = poll.poll_answers;
+                        this.displayed.results = poll.poll_answers.map((a) => ({
+                            text: a,
+                            value: false,
+                        }));
                         if (res.resp_get_poll_scores) {
                             this.chart.scores = res.resp_get_poll_scores.map(
                                 (d) => parseInt(d)
@@ -718,7 +740,7 @@ export default {
             ].every((i) => i !== "");
         },
         chartStyle() {
-            const x = this.displayed.poll_answers.length;
+            const x = this.displayed.answers.length;
             return x === 0
                 ? null
                 : "width: 900px; height: " + (75 * x).toString() + "px";
@@ -741,8 +763,18 @@ export default {
         },
     },
     methods: {
+        dateFormattedString(d) {
+            return d === null ? d : d.toLocaleString()
+        },
+        incDate() {
+            let end = new Date();
+            end.setTime(86400000 + this.creatingPoll.startDate.getTime());
+            this.creatingPoll.endDate = end;
+        },
         switchToRestored(pollid) {
-            this.$toast.info("Retrieving poll data from server... Hang on tight!")
+            this.$toast.info(
+                "Retrieving poll data from server... Hang on tight!"
+            );
             return fetch(Requests.server_url[AppMode] + "/polls/" + pollid)
                 .then((res) => res.json())
                 .then((res) => {
@@ -765,7 +797,7 @@ export default {
                             parseInt(d)
                         );
                         this.setChartOptions(
-                            this.displayed.poll_answers,
+                            this.displayed.answers,
                             this.chart.scores
                         );
                     }
@@ -802,11 +834,9 @@ export default {
                 );
         },
         toggleResults(k) {
-            this.displayed.poll_results[k].value = !this.displayed.poll_results[
-                k
-            ].value;
-            if (!this.displayed.poll_multiple)
-                this.displayed.poll_results.forEach(
+            this.displayed.results[k].value = !this.displayed.results[k].value;
+            if (!this.displayed.multiple)
+                this.displayed.results.forEach(
                     (item, index) =>
                         (item.value = index === k ? item.value : false)
                 );
@@ -898,6 +928,7 @@ export default {
             };
             let payload = {
                 create_hash: this.user.hash,
+                create_email: this.user.email,
                 create_token: this.user.token,
                 create_startDate: this.creatingPoll.startDate,
             };
@@ -950,20 +981,22 @@ export default {
                 take_fingerprint: this.user.fingerprint,
                 take_hash: this.user.hash,
                 take_token: this.user.token,
-                take_results: this.displayed.poll_answers.map((r) =>
-                    this.displayed.poll_results.find((x) => x.text === r).value
+                take_results: this.displayed.answers.map((r) =>
+                    this.displayed.results.find((x) => x.text === r).value
                         ? 1
                         : 0
                 ),
                 take_pollid: PollId.toString(),
-                take_email: this.user.email
+                take_email: this.user.email,
             };
             return Requests.makeReq("post", "take", payload)
                 .catch((err) => this.$toast.error(err))
                 .then((res) => this.$toast.success(res.resp_take_msg));
         },
         restoreHistory() {
-            this.$toast.info("Retrieving entire history from server... Hang on tight!")
+            this.$toast.info(
+                "Retrieving entire history from server... Hang on tight!"
+            );
             const payload = {
                 myhistory_hash: this.user.hash,
                 myhistory_token: this.user.token,
@@ -976,19 +1009,19 @@ export default {
                     if (res.resp_myhistory !== null) {
                         this.$toast.success(res.resp_myhistory_msg);
                         const mypolls = res.resp_myhistory_polls;
-                        const created = res.resp_myhistory_created;
-                        const taken = res.resp_myhistory_taken;
+                        const created = res.resp_myhistory_created || [];
+                        const taken = res.resp_myhistory_taken || [];
                         for (let [k, entry] of Object.entries(mypolls)) {
                             const poll = JSON.parse(entry[2][1]);
                             const startDate = new Date(poll.poll_startDate);
                             const secret = entry[1][1];
-                            const active = JSON.parse(entry[3][1])
+                            const isActive = JSON.parse(entry[3][1]);
                             const excerpt = {
                                 question: poll.poll_question,
                                 startDate,
                                 secret,
                                 pollid: k,
-                                active
+                                isActive,
                             };
                             if (poll.poll_endDate !== null)
                                 excerpt.endDate = new Date(poll.poll_endDate);

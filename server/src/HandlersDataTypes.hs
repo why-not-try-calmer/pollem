@@ -43,6 +43,7 @@ $(deriveJSON defaultOptions ''ReqConfirmToken)
 
 data ReqCreate = ReqCreate {
     create_hash      :: T.Text,
+    create_email     :: T.Text,
     create_token     :: T.Text,
     create_recipe    :: T.Text,
     create_startDate :: T.Text,

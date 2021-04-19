@@ -32,6 +32,7 @@ import           Times                  (getNow)
 data DbReq =
     SCreate {
         create_poll_hash      :: B.ByteString,
+        create_poll_email     :: B.ByteString,
         create_poll_token     :: B.ByteString,
         create_poll_id        :: B.ByteString,
         create_poll_recipe    :: B.ByteString,
@@ -126,11 +127,11 @@ submit (SConfirm token fingerprint hash) = -- hash generated from the handler, t
                             sadd "users" [hash]
                             pure . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
                         else noUser
-submit (SCreate hash token pollid recipe startDate mb_endDate secret) =
+submit (SCreate hash email token pollid recipe startDate mb_endDate secret) =
     let pollid_txt = decodeUtf8 pollid
         key = "user:" `B.append` hash
         payload =
-            let base = [("author_hash",hash),("secret",secret),("recipe",recipe),("startDate",startDate),("active","true")]
+            let base = [("author_hash",hash),("author_email", email),("secret",secret),("recipe",recipe),("startDate",startDate),("active","true")]
                 endDate = (\v -> pure ("endDate" :: B.ByteString , v)) =<< mb_endDate
             in  base ++ catMaybes [endDate]
     in  exists ("poll:" `B.append` pollid) >>= \case
@@ -162,7 +163,7 @@ submit (SClose hash token pollid) =
                     $ "Either the poll was closed already, or you don't have closing rights." else
                 if missingFrom [("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ mempty
                 else do
-                hset pollid "active" "false"
+                hset ("poll:" `B.append` pollid) "active" "false"
                 pure . Right . R.Ok $ "This poll was closed: " `T.append` pollid_txt
             _ -> pure . Left . R.Err PollNotExist $ pollid_txt
 
@@ -319,10 +320,10 @@ notifyOnDisable pollids = traverse getMetaScoresNotify pollids >>=
         emailOne pollid meta_data recipients =
             let (scores, poll_meta_data) = meta_data
                 hmap = HMS.fromList poll_meta_data
-                author = fromMaybe "" $ HMS.lookup "author" hmap
+                author = case HMS.lookup "author_email" hmap of Just e -> e
                 mb_poll = decodeStrict =<< HMS.lookup "recipe" hmap :: Maybe Poll
                 poll = case mb_poll of Just p -> p
-            in  sendEmail $ emailNotifyOnClose config recipients poll author scores
+            in  sendEmail $ emailNotifyOnClose config (author:recipients) poll author scores
         getMetaScoresNotify pollid = do
             meta <- getPollMetaScores pollid
             recipients <- smembers ("participants_email" `B.append` pollid)
