@@ -701,32 +701,7 @@ export default {
                             res,
                             Requests.valid_keys.get.polls.resp
                         );
-                        const poll = res.resp_get_poll;
-                        this.displayed.startDate = poll.poll_startDate;
-                        this.displayed.multiple = poll.poll_multiple;
-                        this.displayed.visible = poll.poll_visible;
-                        this.displayed.question = poll.poll_question;
-                        this.displayed.description = poll.poll_description;
-                        this.displayed.endDate = !poll.poll_endDate
-                            ? null
-                            : poll.poll_endDate;
-                        this.displayed.answers = poll.poll_answers;
-                        this.displayed.results = poll.poll_answers.map((a) => ({
-                            text: a,
-                            value: false,
-                        }));
-                        if (res.resp_get_poll_scores) {
-                            this.chart.scores = res.resp_get_poll_scores.map(
-                                (d) => parseInt(d)
-                            );
-                            this.setChartOptions(
-                                this.displayed.poll_answers,
-                                this.chart.scores
-                            );
-                        }
-                        this.$toast.success(
-                            Replies.loaded + "Here is your poll."
-                        );
+                        this.loadBindPoll(res);
                     });
             });
     },
@@ -764,12 +739,38 @@ export default {
     },
     methods: {
         dateFormattedString(d) {
-            return d === null ? d : d.toLocaleString()
+            return d === null ? d : d.toLocaleString();
         },
         incDate() {
             let end = new Date();
             end.setTime(86400000 + this.creatingPoll.startDate.getTime());
             this.creatingPoll.endDate = end;
+        },
+        loadBindPoll(res) {
+            const poll = res.resp_get_poll;
+            this.displayed.startDate = poll.poll_startDate;
+            this.displayed.multiple = poll.poll_multiple;
+            this.displayed.visible = poll.poll_visible;
+            this.displayed.question = poll.poll_question;
+            this.displayed.description = poll.poll_description;
+            this.displayed.endDate = !poll.poll_endDate
+                ? null
+                : poll.poll_endDate;
+            this.displayed.answers = poll.poll_answers;
+            this.displayed.results = poll.poll_answers.map((a) => ({
+                text: a,
+                value: false,
+            }));
+            if (res.resp_get_poll_scores) {
+                this.chart.scores = res.resp_get_poll_scores.map((d) =>
+                    parseInt(d)
+                );
+                this.setChartOptions(
+                    this.displayed.poll_answers,
+                    this.chart.scores
+                );
+            }
+            this.$toast.success(Replies.loaded + "Here is your poll.");
         },
         switchToRestored(pollid) {
             this.$toast.info(
@@ -782,25 +783,7 @@ export default {
                         res,
                         Requests.valid_keys.get.polls.resp
                     );
-                    const poll = res.resp_get_poll;
-                    this.displayed = Object.assign(this.displayed, poll);
-                    if (!poll.poll_endDate) this.displayed.poll_endDate = null;
-                    if (this.displayed.poll_answers)
-                        this.displayed.poll_results = poll.poll_answers.map(
-                            (a) => ({
-                                text: a,
-                                value: false,
-                            })
-                        );
-                    if (res.resp_get_poll_scores !== null) {
-                        this.chart.scores = res.resp_get_poll_scores.map((d) =>
-                            parseInt(d)
-                        );
-                        this.setChartOptions(
-                            this.displayed.answers,
-                            this.chart.scores
-                        );
-                    }
+                    this.loadBindPoll(res);
                     PollId = pollid;
                     this.active = 2;
                 });
