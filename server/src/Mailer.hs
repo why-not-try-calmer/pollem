@@ -18,7 +18,6 @@ import qualified ErrorsReplies          as R
 import           HandlersDataTypes
 import           Network.HTTP.Req
 import Data.Foldable (foldl')
-
 --
 
 {-- App types  --}
