@@ -364,7 +364,7 @@
                                 />
                             </div>
                             <div>
-                                <label>taken:</label>
+                                <label>taken</label>
                                 <input
                                     class="ml-3"
                                     disabled
@@ -948,10 +948,17 @@ export default {
                 .catch((err) => this.$toast.error(err))
                 .then((res) => {
                     if (res.resp_close_msg === "ok") {
-                        this.user.created.find(p => p.pollid === pollid).isActive = false
-                        this.$toast.success("Poll successfully closed. An email notification have been issued to all participants.")
-                    }
-                    else this.$toast.error("Unable to close the poll, for this reasons: " + res.resp_close_msg)
+                        this.user.created.find(
+                            (p) => p.pollid === pollid
+                        ).isActive = false;
+                        this.$toast.success(
+                            "Poll successfully closed. An email notification have been issued to all participants."
+                        );
+                    } else
+                        this.$toast.error(
+                            "Unable to close the poll, for this reasons: " +
+                                res.resp_close_msg
+                        );
                 });
         },
         takePoll() {
@@ -986,23 +993,24 @@ export default {
                 .then((res) => {
                     if (res.resp_myhistory !== null) {
                         this.$toast.success(res.resp_myhistory_msg);
-                        const mypolls = res.resp_myhistory_polls;
+                        const restoredPolls = res.resp_myhistory_polls;
                         const created = res.resp_myhistory_created || [];
                         const taken = res.resp_myhistory_taken || [];
-                        for (let [k, entry] of Object.entries(mypolls)) {
-                            const poll = JSON.parse(entry[2][1]);
-                            const startDate = new Date(poll.poll_startDate);
-                            const secret = entry[1][1];
-                            const isActive = JSON.parse(entry[3][1]);
+                        for (const k in restoredPolls) {
+                            const poll = Object.fromEntries(
+                                new Map(restoredPolls[k])
+                            );
+                            console.log(poll)
                             const excerpt = {
-                                question: poll.poll_question,
-                                startDate,
-                                secret,
+                                question: JSON.parse(poll.recipe).poll_question,
+                                startDate: new Date(poll.startDate),
+                                secret: poll.secret,
                                 pollid: k,
-                                isActive,
+                                isActive: poll.isActive,
                             };
-                            if (poll.poll_endDate !== null)
-                                excerpt.endDate = new Date(poll.poll_endDate);
+                            if (!poll.endDate && poll.endDate !== null)
+                                excerpt.endDate = "End date never set."
+                            else excerpt.endDate = new Date(poll.endDate)
                             if (created.includes(k))
                                 this.user.created.push(excerpt);
                             if (taken.includes(k))
@@ -1026,7 +1034,7 @@ export default {
         },
     },
     watch: {
-        user: {
+        /*user: {
             deep: true,
             handler(user) {
                 if (
@@ -1042,7 +1050,7 @@ export default {
                     Storage.set(user);
                 }
             },
-        },
+        },*/
     },
 };
 </script>
