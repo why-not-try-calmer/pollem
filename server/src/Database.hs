@@ -98,7 +98,8 @@ getPollsNb = smembers "polls" >>= \case
     Right res -> pure . Right . length $ res
 
 submit :: DbReq -> Redis (Either (Err T.Text) (Ok T.Text))
-submit (SAsk hash token) = -- hash + token generated a first time from the handler
+{- hash + token generated a first time from the handler -}
+submit (SAsk hash token) =
     let key = "user:" `B.append` hash
     in  do
         liftIO . print $ key
@@ -207,6 +208,8 @@ getPollMetaScores pollid = smembers ("participants_hashes:" `B.append` pollid) >
                 TxSuccess (answers, poll_meta_data) -> pure $ Right (answers, poll_meta_data)
 
 getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Bool, Maybe [Int], Maybe B.ByteString))
+{- Returns all data on a single poll, as a tuple
+<poll contents, whether is active, maybe the scores, maybe the secret> -}
 getPoll (SGet pollid) =
     let pollid_txt = decodeUtf8 pollid
         key = ("poll:" `B.append` pollid)
@@ -248,6 +251,7 @@ getPoll (SGet pollid) =
                             Just poll -> pure . Right $ (poll, active, mb_scores, mb_secret)
 
 getPollIdEndDate :: Redis (Either (Err T.Text) [(B.ByteString, B.ByteString)])
+{- Traverse the entire db and collects the endDate of all polls -}
 getPollIdEndDate = smembers "polls" >>= \case
     Left _ -> dbErr
     Right ids -> traverse collectEndifExists ids >>= \res -> pure . Right . catMaybes $ res
@@ -262,6 +266,7 @@ getPollIdEndDate = smembers "polls" >>= \case
                     Just e  -> pure . Just $ (pollid, e)
 
 disableNotifyPolls :: [B.ByteString] -> Redis (Either (Err T.Text) (Ok T.Text))
+{- Set all polls in the list as 'active' => 'false' -}
 disableNotifyPolls [] = pure . Right . R.Ok $ "No poll to disable"
 disableNotifyPolls ls = multiExec (sequence <$> traverse disablePoll ls) >>= \case
     TxError _ -> dbErr
@@ -272,6 +277,8 @@ disableNotifyPolls ls = multiExec (sequence <$> traverse disablePoll ls) >>= \ca
             in  hset key "active" "false"
 
 getTakenCreated :: B.ByteString -> Redis (Either (Err T.Text) ([B.ByteString], [B.ByteString]))
+{- Get a user's complete polling history as a pair of lists
+including the polls taken and created, in that order -}
 getTakenCreated hash = smembers "polls" >>= \case
     Left _ -> dbErr
     Right ids ->
@@ -310,6 +317,8 @@ getMyPollsData hash = getTakenCreated hash >>= \case
         collectPoll i = hgetall ("poll:" `B.append` i)
 
 notifyOnDisable :: [B.ByteString] -> Redis (Either (Err T.Text) (Ok T.Text))
+{- for each users in the input list, send them a 'poll closed' email, after making sure
+they are given the scores and the poll's metadata -}
 notifyOnDisable pollids = traverse getMetaScoresNotify pollids >>=
     (\case
         Left _  -> dbErr

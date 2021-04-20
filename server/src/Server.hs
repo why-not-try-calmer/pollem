@@ -250,6 +250,6 @@ startApp = do
     let config = Config initSendgridConfig connector state cache
     {- running -}
     print "Worker started..."
-    runAutoClose connector cache
+    runCloseOnExpired connector cache
     print $ "Server starting on port " ++ show port
     run port $ corsPolicy (app config)

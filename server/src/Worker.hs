@@ -42,11 +42,11 @@ closeOnExpired conn mvar = do
     {- purges cache from every entry that is more than 1-month old -}
     modifyMVar_ mvar $ pure . HMS.filter (\(_,_,_,date, _) -> fresherThanOneMonth now date)
 
-runAutoClose :: Connection -> PollCache -> IO (Async())
-runAutoClose conn pollcache =
-    let sweep = closeOnExpired conn pollcache
+runCloseOnExpired :: Connection -> PollCache -> IO (Async())
+runCloseOnExpired conn pollcache =
+    let go = closeOnExpired conn pollcache
     in  async . forever $ do
-        sweep
+        go
         print "Swept once and now sleeping for one hour."
         threadDelay $ 1000000 * 3600
         `catch` \e ->
