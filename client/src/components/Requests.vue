@@ -957,7 +957,13 @@ export default {
             };
             return Requests.makeReq("post", "close", payload)
                 .catch((err) => this.$toast.error(err))
-                .then((res) => this.$toast.success(res.resp_close_msg));
+                .then((res) => {
+                    if (res.resp_close_msg === "ok") {
+                        this.user.created.find(p => p.pollid === pollid).isActive = false
+                        this.$toast.success("Poll successfully closed. An email notification have been issued to all participants.")
+                    }
+                    else this.$toast.error("Unable to close the poll, for this reasons: " + res.resp_close_msg)
+                });
         },
         takePoll() {
             const payload = {

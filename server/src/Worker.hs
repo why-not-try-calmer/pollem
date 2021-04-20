@@ -20,8 +20,8 @@ import           Mailer                   (SendGridConfig, SendGridEmail)
 import           Times                    (fresherThanOneMonth, getNow,
                                            isoOrCustom)
 
-autoClose :: Connection -> PollCache -> IO ()
-autoClose conn mvar = do
+closeOnExpired :: Connection -> PollCache -> IO ()
+closeOnExpired conn mvar = do
     print "Attempting to sweep..."
     now <- getNow
     res <- connDo conn $ getPollIdEndDate >>= \case
@@ -44,7 +44,7 @@ autoClose conn mvar = do
 
 runAutoClose :: Connection -> PollCache -> IO (Async())
 runAutoClose conn pollcache =
-    let sweep = autoClose conn pollcache
+    let sweep = closeOnExpired conn pollcache
     in  async . forever $ do
         sweep
         print "Swept once and now sleeping for one hour."

@@ -95,7 +95,7 @@ data RespCreate = RespCreate {
 }
 $(deriveJSON defaultOptions ''RespCreate)
 
-newtype RespClose = RespClose { resp_close_msg :: T.Text}
+newtype RespClose = RespClose { resp_close_msg :: T.Text }
 $(deriveJSON defaultOptions ''RespClose)
 
 newtype RespTake = RespTake { resp_take_msg :: T.Text }

@@ -59,6 +59,9 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
             env <- ask
             let mvar = pollmanager env
                 hashed = toCleanB . hashEmail $ email_b
+                -- hashing the email address to obtain an identifier, called 'hash' in this project
+                -- the goal is to avoid using emails at all, except for the implementation of
+                -- participations
                 asksubmit token = SAsk hashed token
             res <- liftIO $ do
                 (n, gen) <- takeMVar mvar
@@ -99,7 +102,10 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 Left err -> stopOn err
                 Right total ->
                     let pollid = encodeStrict (total + 1)
+                        -- increment the total number of polls from the 
+                        -- mvar
                         takeManager = takeMVar . pollmanager $ env
+                        -- generating secret, using the startDate as the salt
                         produceSecret = do
                             (n,g) <- takeManager
                             secret <- createCrypto g $ encodeUtf8 startDate
@@ -126,26 +132,33 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 Left err -> pure . RespClose . R.renderError $ err
                 Right _ -> liftIO (connDo conn . notifyOnDisable $ [pollid_b]) >>= \case
                     Left err -> pure . RespClose $ R.renderError err
-                    Right _  -> pure $ RespClose "Poll closed"
+                    Right _  -> pure $ RespClose "ok"
 
         get :: Int -> Maybe String -> AppM RespGet
         get pollid secret_req = do
             env <- ask
             liftIO $ do
                 now <- getNow
+                -- checking if looked for poll is in the cache
                 hmap <- readMVar . pollcache $ env
                 case HMS.lookup pollid_b hmap of
                     -- poll, scores, last accessed datetime, secret
                     Just (poll, active, mb_scores, _, mb_secret_stored) ->
+                        -- found in cache: exit early if the poll was not closed and we're missing auth credentials
+                        -- NB: 'not closed' does not mean 'not running'; it could be not closed because the request arrives before the
+                        -- sweeper closing after the endDate
                         if runningButMissing now poll mb_secret_stored then stopWith badsecret else
+                        -- found in cache, not running or valid credentials: query db if poll is visible or was closed
                         if poll_visible poll || not active then goFetchScores pollid_b env now else do
                             -- updating cache
                             updateCache env pollid_b now
                             finish poll mb_scores
+                    -- not found in cache, querying db
                     Nothing -> liftIO (connDo (redisconn env) . getPoll $ SGet pollid_b) >>= \case
                         Left err -> stopWith err
                         Right (poll, active, mb_scores, mb_secret_stored_b) ->
                             let res = (poll, active, mb_scores, now, mb_secret_req)
+                            -- as above, we exit early if the poll is still due to expire and we have bad credentials
                             in if runningButMissing now poll (decodeUtf8 <$> mb_secret_stored_b) then stopWith badsecret else do
                                 -- adding to cache
                                 addToCache env res
