@@ -43,6 +43,7 @@ $(deriveJSON defaultOptions ''ReqConfirmToken)
 
 data ReqCreate = ReqCreate {
     create_hash      :: T.Text,
+    create_email     :: T.Text,
     create_token     :: T.Text,
     create_recipe    :: T.Text,
     create_startDate :: T.Text,
@@ -61,6 +62,7 @@ data ReqTake = ReqTake {
     take_hash        :: T.Text,
     take_token       :: T.Text,
     take_fingerprint :: T.Text,
+    take_email       :: T.Text,
     take_pollid      :: T.Text,
     take_results     :: [Int]
 } deriving (Eq, Show)
@@ -93,7 +95,7 @@ data RespCreate = RespCreate {
 }
 $(deriveJSON defaultOptions ''RespCreate)
 
-newtype RespClose = RespClose { resp_close_msg :: T.Text}
+newtype RespClose = RespClose { resp_close_msg :: T.Text }
 $(deriveJSON defaultOptions ''RespClose)
 
 newtype RespTake = RespTake { resp_take_msg :: T.Text }

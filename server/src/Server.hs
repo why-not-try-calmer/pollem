@@ -41,7 +41,7 @@ type API =
     "ask_token" :> ReqBody '[JSON] ReqAskToken :> Post '[JSON] RespAskToken :<|>
     "confirm_token" :> ReqBody '[JSON] ReqConfirmToken :> Post '[JSON] RespConfirmToken :<|>
     "create" :> ReqBody '[JSON] ReqCreate :> Post '[JSON] RespCreate :<|>
-    -- "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
+    "close":> ReqBody '[JSON] ReqClose :> Post '[JSON] RespClose :<|>
     "polls" :> Capture "id" Int :> QueryParam "secret" String :> Get '[JSON] RespGet :<|>
     "myhistory" :> ReqBody '[JSON] ReqMyHistory :> Post '[JSON] RespMyHistory :<|>
     "take" :> ReqBody '[JSON] ReqTake :> Post '[JSON] RespTake :<|>
@@ -51,7 +51,7 @@ api :: Proxy API
 api = Proxy
 
 server :: ServerT API AppM
-server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|> myhistory :<|> take :<|> warmup
+server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhistory :<|> take :<|> warmup
     where
         ask_token :: ReqAskToken -> AppM RespAskToken
         ask_token (ReqAskToken email) = do
@@ -59,6 +59,9 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
             env <- ask
             let mvar = pollmanager env
                 hashed = toCleanB . hashEmail $ email_b
+                -- hashing the email address to obtain an identifier, called 'hash' in this project
+                -- the goal is to avoid using emails at all, except for the implementation of
+                -- participations
                 asksubmit token = SAsk hashed token
             res <- liftIO $ do
                 (n, gen) <- takeMVar mvar
@@ -66,7 +69,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                 token <- createCrypto gen (toCleanB . show $ now)
                 let token_b = toCleanB token
                 putMVar mvar (n, gen)
-                sendEmail (makeSendGridEmail (sendgridconf env) token_b email_b) >>= \case
+                sendEmail (emailToken (sendgridconf env) token_b email_b) >>= \case
                     Right _ -> connDo (redisconn env) . submit $ asksubmit token_b
             case res of
                 Left err  -> pure . RespAskToken . R.renderError $ err
@@ -85,8 +88,9 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                 Right msg -> pure $ RespConfirmToken (R.renderOk msg) (Just . decodeUtf8 $ hashed) (Just token)
 
         create :: ReqCreate -> AppM RespCreate
-        create (ReqCreate hash token recipe startDate endDate) = do
+        create (ReqCreate hash email token recipe startDate endDate) = do
             let hash_b = encodeUtf8 hash
+                email_b = encodeUtf8 email
                 token_b = encodeUtf8 token
                 recipe_b = encodeUtf8 recipe
                 startDate_b = encodeUtf8 startDate
@@ -98,7 +102,10 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                 Left err -> stopOn err
                 Right total ->
                     let pollid = encodeStrict (total + 1)
+                        -- increment the total number of polls from the 
+                        -- mvar
                         takeManager = takeMVar . pollmanager $ env
+                        -- generating secret, using the startDate as the salt
                         produceSecret = do
                             (n,g) <- takeManager
                             secret <- createCrypto g $ encodeUtf8 startDate
@@ -108,48 +115,58 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                         secret <- produceSecret
                         case isoOrCustom . T.unpack $ startDate of
                             Left _ -> pure $ RespCreate (R.renderError (R.Err R.DatetimeFormat (mempty :: T.Text))) Nothing Nothing
-                            Right date -> liftIO (connDo (redisconn env) . submit $ SCreate hash_b token_b pollid recipe_b startDate_b mb_endDate_b secret) >>=
+                            Right date -> liftIO (connDo (redisconn env) . submit $ SCreate hash_b email_b token_b pollid recipe_b startDate_b mb_endDate_b secret) >>=
                                 \case   Left err -> stopOn err
                                         Right msg -> pure $ RespCreate (R.renderOk msg) (Just $ total + 1) (Just . decodeUtf8 $ secret)
             where
                 stopOn err = pure $ RespCreate (R.renderError err) Nothing Nothing
 
-        {-close :: ReqClose -> AppM RespClose
+        close :: ReqClose -> AppM RespClose
         close (ReqClose hash token pollid) = do
             let hash_b = encodeUtf8 hash
                 token_b = encodeUtf8 token
                 pollid_b = encodeUtf8 pollid
             env <- ask
-            liftIO (connDo (redisconn env) . submit $ SClose hash_b token_b pollid_b) >>= \case
+            let conn = redisconn env
+            liftIO (connDo conn . submit $ SClose hash_b token_b pollid_b) >>= \case
                 Left err -> pure . RespClose . R.renderError $ err
-                Right ok -> pure $ RespClose $ "Poll closed: " `T.append` (T.pack . show $ pollid)-}
+                Right _ -> liftIO (connDo conn . notifyOnDisable $ [pollid_b]) >>= \case
+                    Left err -> pure . RespClose $ R.renderError err
+                    Right _  -> pure $ RespClose "ok"
 
         get :: Int -> Maybe String -> AppM RespGet
         get pollid secret_req = do
             env <- ask
             liftIO $ do
                 now <- getNow
+                -- checking if looked for poll is in the cache
                 hmap <- readMVar . pollcache $ env
                 case HMS.lookup pollid_b hmap of
                     -- poll, scores, last accessed datetime, secret
                     Just (poll, active, mb_scores, _, mb_secret_stored) ->
-                        if failsTest now poll mb_secret_stored then stopWith badsecret else
+                        -- found in cache: exit early if the poll was not closed and we're missing auth credentials
+                        -- NB: 'not closed' does not mean 'not running'; it could be not closed because the request arrives before the
+                        -- sweeper closing after the endDate
+                        if runningButMissing now poll mb_secret_stored then stopWith badsecret else
+                        -- found in cache, not running or valid credentials: query db if poll is visible or was closed
                         if poll_visible poll || not active then goFetchScores pollid_b env now else do
                             -- updating cache
                             updateCache env pollid_b now
                             finish poll mb_scores
+                    -- not found in cache, querying db
                     Nothing -> liftIO (connDo (redisconn env) . getPoll $ SGet pollid_b) >>= \case
                         Left err -> stopWith err
                         Right (poll, active, mb_scores, mb_secret_stored_b) ->
                             let res = (poll, active, mb_scores, now, mb_secret_req)
-                            in if failsTest now poll (decodeUtf8 <$> mb_secret_stored_b) then stopWith badsecret else do
+                            -- as above, we exit early if the poll is still due to expire and we have bad credentials
+                            in if runningButMissing now poll (decodeUtf8 <$> mb_secret_stored_b) then stopWith badsecret else do
                                 -- adding to cache
                                 addToCache env res
                                 finish poll mb_scores
             where
                 pollid_b = encodeStrict pollid
                 mb_secret_req = T.pack <$> secret_req
-                failsTest now poll mb_secret_stored =
+                runningButMissing now poll mb_secret_stored =
                     let mismatch = fromMaybe False $ (/=) <$> mb_secret_req <*> mb_secret_stored
                         running a Nothing = False
                         running a mb_b = case poll_endDate poll of
@@ -178,10 +195,10 @@ server = ask_token :<|> confirm_token :<|> create :<|> {- close :<|> -} get :<|>
                     in  pure finish
 
         take :: ReqTake -> AppM RespTake
-        take (ReqTake hash token finger pollid answers) = do
+        take (ReqTake hash token finger email pollid answers) = do
             env <- ask
             res <- liftIO . connDo (redisconn env) . submit $
-                STake (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeUtf8 pollid) (map encodeStrict answers)
+                STake (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeUtf8 email) (encodeUtf8 pollid) (map encodeStrict answers)
             case res of
                 Left err  -> pure . RespTake . R.renderError $ err
                 Right msg -> pure . RespTake . R.renderOk $ msg
@@ -233,6 +250,6 @@ startApp = do
     let config = Config initSendgridConfig connector state cache
     {- running -}
     print "Worker started..."
-    runSweeperWorker cache connector
+    runCloseOnExpired connector cache
     print $ "Server starting on port " ++ show port
     run port $ corsPolicy (app config)

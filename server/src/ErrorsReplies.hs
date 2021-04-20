@@ -8,6 +8,7 @@ import qualified Data.Text as T
 data ErrT =
     BadEmail | EmailTaken | PollExists | PollNotExist | PollIncomplete |
     PollTakenAlready |EmptyString | TokenNotExist | Database |
+    EmptyMailRecipients |
     UserNotExist | PollInactive | UserNotVerified | BorkedData | Custom | SendGridError | DatetimeFormat | BadSecret deriving (Eq, Show)
 
 data Err a = Err ErrT a deriving (Eq, Show)
@@ -26,6 +27,7 @@ renderError (Err Database _) = "Database error: Couldn't satisfy server request.
 renderError (Err DatetimeFormat _) = "Unable to parse the date, aborting now."
 renderError (Err EmailTaken _) = "Bear in mind that this email address is registered already. I will send you a verification email nonetheless. You don't need to use it unless you have issues authenticating on this application."
 renderError (Err EmptyString _) = "The string you've submitted was empty."
+renderError (Err EmptyMailRecipients _) = "This email has no recipient"
 renderError (Err PollExists v) = addToText "This poll exists already: " v
 renderError (Err PollInactive v) = addToText "You've tried to participate to an inactive poll." v
 renderError (Err PollNotExist v) = addToText "This poll does not exist (anymore): " v
