@@ -9,6 +9,7 @@ import           Control.Monad.IO.Class         (MonadIO (liftIO))
 import qualified Data.Text                      as T
 import           Database.MongoDB
 import qualified Database.MongoDB.Transport.Tls as DbTLS
+import           HandlersDataTypes
 
 data MongoCreds = MongoCreds {
     shard :: String,
@@ -17,7 +18,10 @@ data MongoCreds = MongoCreds {
 } deriving (Eq, Show)
 
 initMongCreds :: MongoCreds
-initMongCreds = MongoCreds "cluster0-shard-00-01.cmocx.mongodb.net" "pollem-app" "FmUCY0OkZVHJ1MUY"
+initMongCreds = MongoCreds "cluster0-shard-00-02.cmocx.mongodb.net" "pollem-app" "FmUCY0OkZVHJ1MUY"
+
+-- FIX ME: MongoAtlas tends to shuffle around the role of 'primary' versus 'secondary' shard
+-- Make sure to call selectOK to avoid failing to authenticate
 
 testAccess :: IO ()
 testAccess =
@@ -30,5 +34,19 @@ testAccess =
             close pipe
     where
         runIt = do
-            insert "test" ["name" =: "Samuel"]
-            findOne (select ["name" =: "Samuel"] "test") >>= liftIO . print
+            insert "polls" $ toBSON aPoll
+            findOne (select ["name" =: "Samuel"] "polls") >>= liftIO . print
+
+aPoll :: Poll
+aPoll = Poll "start_date" (Just "end_date") "question" "description" True True ["Answer A", "Answer B"]
+
+toBSON :: Poll -> [Field]
+toBSON (Poll s e q d m v a) = 
+    let def = ["startDate" =: val s, "question" =: val q, "description" =: val d, "multiple" =: val m, "visible" =: val v, "answers" =: val a]
+    in  case e of
+        Nothing -> def
+        Just endDate -> def ++ ["endDate" =: val endDate]
+
+main = try testAccess >>= \case
+    Left e -> let e' = e :: SomeException in print ("Failed to run testAccess: " ++ show e)
+    Right _ -> print "Success!"

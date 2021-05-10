@@ -26,7 +26,7 @@ data Poll = Poll {
     poll_multiple    :: Bool,
     poll_visible     :: Bool,
     poll_answers     :: [T.Text]
-} deriving (Eq, Show)
+} deriving (Show, Eq)
 $(deriveJSON defaultOptions ''Poll)
 
 newtype ReqAskToken = ReqAskToken {

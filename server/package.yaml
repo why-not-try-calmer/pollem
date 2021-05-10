@@ -20,23 +20,22 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
-- aeson
-- aeson-extra
 - servant-server
 - wai
+- wai-cors
 - warp
-- time
+- mtl
 - async
+- time
 - text
 - containers
 - unordered-containers
-- wai-cors
+- aeson
+- aeson-extra
 - req
 - hedis
 - cryptonite
 - bytestring
-- memory
-- mtl
 - mongoDB
 
 library:

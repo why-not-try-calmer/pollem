@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: aff4780a5321a73b5dcf45668a4f076c1b96c8c454e0fb673cb6087282f5e9bb
+-- hash: 61ae76adf7fc00d6cf536e898b24cf4f2f6c80d42a019d43b07e79cbbe18825a
 
 name:           pollem
 version:        0.1.0.0
@@ -47,7 +47,6 @@ library
     , containers
     , cryptonite
     , hedis
-    , memory
     , mongoDB
     , mtl
     , req
@@ -76,7 +75,6 @@ executable server-exe
     , containers
     , cryptonite
     , hedis
-    , memory
     , mongoDB
     , mtl
     , pollem
@@ -110,7 +108,6 @@ test-suite server-test
     , hspec
     , hspec-wai
     , hspec-wai-json
-    , memory
     , mongoDB
     , mtl
     , pollem
