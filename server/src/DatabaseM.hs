@@ -34,27 +34,29 @@ testAccess =
             close pipe
     where
         runIt = do
-            insert "polls" $ pollToBSON aPoll
+            insert "polls" . toBSON . BSPoll $ makeAPoll
             findOne (select ["name" =: "Samuel"] "polls") >>= liftIO . print
-
-aPoll :: Poll
-aPoll = Poll "start_date" (Just "end_date") "question" "description" True True ["Answer A", "Answer B"]
 
 data Meta = Meta Int Int Int Int Int (Maybe Int)
 
-pollToBSON :: Poll -> [Field]
-pollToBSON (Poll s e q d m v a) = 
+makeAPoll :: Poll
+makeAPoll = Poll "start_date" (Just "end_date") "question" "description" True True ["Answer A", "Answer B"]
+
+data BSONable = BSPoll { _poll :: Poll } | BSMeta { _meta :: Meta }
+
+toBSON :: BSONable -> [Field]
+toBSON (BSPoll (Poll s e q d m v a)) =
     let def = ["startDate" =: val s, "question" =: val q, "description" =: val d, "multiple" =: val m, "visible" =: val v, "answers" =: val a]
     in  case e of
-        Nothing -> def
+        Nothing      -> def
         Just endDate -> def ++ ["endDate" =: val endDate]
-
-metaToBSON (Meta h em t r s en) =
+toBSON (BSMeta (Meta h em t r s en)) =
     let def = ["hash" =: val h, "email" =: val em, "token" =: val t, "recipe" =: val r, "startDate" =: val s]
     in  case en of
-        Nothing -> def
+        Nothing     -> def
         Just enDate -> def ++ ["endDate" =: val en]
 
-main = try testAccess >>= \case
-    Left e -> let e' = e :: SomeException in print ("Failed to run testAccess: " ++ show e)
-    Right _ -> print "Success!"
+main :: IO ()
+main = do
+    let a = BSPoll makeAPoll
+    print $ toBSON a
