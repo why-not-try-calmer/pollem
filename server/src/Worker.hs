@@ -3,6 +3,7 @@
 
 module Worker where
 
+import           AppTypes                 (PollCache, initCache)
 import           Control.Concurrent
 import           Control.Concurrent.Async
 import           Control.Exception
@@ -10,12 +11,11 @@ import           Control.Monad
 import           Control.Monad.IO.Class   (liftIO)
 import           Data.Foldable            (foldl')
 import qualified Data.HashMap.Strict      as HMS
-import           Database                 (_connDo, connDo, disableNotifyPolls,
+import           DatabaseR                 (_connDo, connDo, disableNotifyPolls,
                                            getPollIdEndDate,
                                            initRedisConnection, notifyOnDisable)
 import           Database.Redis           (Connection, info, keys, runRedis)
 import qualified ErrorsReplies            as R
-import           HandlersDataTypes        (PollCache, initCache)
 import           Mailer                   (SendGridConfig, SendGridEmail)
 import           Times                    (fresherThanOneMonth, getNow,
                                            isoOrCustom)

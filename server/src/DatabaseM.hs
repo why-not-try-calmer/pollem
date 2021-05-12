@@ -4,23 +4,49 @@
 
 module DatabaseM () where
 
+import           AppTypes
 import           Control.Exception              (SomeException, throwIO, try)
 import           Control.Monad.IO.Class         (MonadIO (liftIO))
 import qualified Data.Text                      as T
 import           Database.MongoDB
 import qualified Database.MongoDB.Transport.Tls as DbTLS
-import           HandlersDataTypes
+{-
+    We're saving polls and users to MongoDB. Structure:
+    users -- collection
+        {
+            _id (= user hash in the Haskell code)
+            hash
+            fingerprint
+            email
+            token
+            verified (Bool)
+        }
+    polls -- collection with individual polls:
+        {
+            _id (= author_hash in the Haskell code)
+            author_email
+            author_token
+            recipe (= bytestring containing defining the poll)
+            startDate
+            endDate (optional)
+            secret (= set by default assuming that the creator wants to restrict the poll to only a number of viewers)
+        }
+    polls.{poll_id} -- collection registering singular actions against the poll, i.e. participation
+        {
+            (_id not set)
+            poll_id
+            hash
+            token
+            fingerprint
+            email
+            answers (Array of Int)
+        }
+-}
 --
 
-{- Types -}
+{- Mapping utilities from Redis to MongoDB -}
 
 --
-data MongoCreds = MongoCreds {
-    shard :: String,
-    user  :: T.Text,
-    pwd   ::T.Text
-} deriving (Eq, Show)
-
 data DbReq =
     SCreate {
         create_poll_hash      :: T.Text,
@@ -78,6 +104,12 @@ toBSON (BSReq (STake h t fi em pid ans)) = ["hash" =: h, "token" =: t, "fingerpr
 {- Auth, Connection -}
 
 --
+data MongoCreds = MongoCreds {
+    shard :: String,
+    user  :: T.Text,
+    pwd   ::T.Text
+} deriving (Eq, Show)
+
 initMongCreds :: MongoCreds
 initMongCreds = MongoCreds "cluster0-shard-00-02.cmocx.mongodb.net" "pollem-app" "FmUCY0OkZVHJ1MUY"
 

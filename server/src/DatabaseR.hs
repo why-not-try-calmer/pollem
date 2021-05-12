@@ -2,8 +2,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StrictData        #-}
 
-module Database where
+module DatabaseR where
 
+import           AppTypes
 import           Computations           (collect)
 import           Control.Exception      (SomeException (SomeException), try)
 import           Control.Monad          (void)
@@ -20,7 +21,6 @@ import           Data.Text.Encoding     (decodeUtf8, encodeUtf8)
 import           Database.Redis
 import           ErrorsReplies
 import qualified ErrorsReplies          as R
-import           HandlersDataTypes
 import           Mailer                 (emailNotifyOnClose, initSendgridConfig,
                                          sendEmail)
 import           Times                  (getNow)

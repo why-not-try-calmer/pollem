@@ -9,6 +9,7 @@ module Server
     , app
     ) where
 
+import           AppTypes
 import           Control.Concurrent          (modifyMVar_, putMVar, readMVar,
                                               takeMVar, threadDelay)
 import           Control.Monad.Except        (ExceptT, runExceptT)
@@ -23,11 +24,10 @@ import qualified Data.HashMap.Strict         as HMS
 import           Data.Maybe                  (fromMaybe)
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
-import           Database
+import           DatabaseR
 import           Database.Redis              (Connection, PortID (PortNumber),
                                               disconnect, info, runRedis)
 import qualified ErrorsReplies               as R
-import           HandlersDataTypes
 import           Mailer
 import           Network.Wai
 import           Network.Wai.Handler.Warp
@@ -102,7 +102,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 Left err -> stopOn err
                 Right total ->
                     let pollid = encodeStrict (total + 1)
-                        -- increment the total number of polls from the 
+                        -- increment the total number of polls from the
                         -- mvar
                         takeManager = takeMVar . pollmanager $ env
                         -- generating secret, using the startDate as the salt

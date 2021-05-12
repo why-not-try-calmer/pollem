@@ -2,7 +2,7 @@
 {-# LANGUAGE StrictData        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 
-module HandlersDataTypes where
+module AppTypes where
 
 import           Control.Concurrent.MVar
 import           Crypto.Random           (SystemDRG, getSystemDRG)

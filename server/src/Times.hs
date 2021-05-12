@@ -1,15 +1,10 @@
 module Times where
 
-import Data.Time
-    ( UTCTime,
-      addUTCTime,
-      getCurrentTime,
-      defaultTimeLocale,
-      parseTimeM,
-      zonedTimeToUTC,
-      NominalDiffTime,
-      ZonedTime )
-import Data.Time.Format.ISO8601 (iso8601ParseM)
+import           Data.Time                (NominalDiffTime, UTCTime, ZonedTime,
+                                           addUTCTime, defaultTimeLocale,
+                                           getCurrentTime, parseTimeM,
+                                           zonedTimeToUTC)
+import           Data.Time.Format.ISO8601 (iso8601ParseM)
 
 isoOrCustom :: String -> Either String UTCTime
 isoOrCustom s =

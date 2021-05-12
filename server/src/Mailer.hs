@@ -7,17 +7,17 @@
 
 module Mailer where
 
+import           AppTypes
 import           Control.Monad.IO.Class
 import           Data.Aeson
 import           Data.Aeson.TH
 import qualified Data.ByteString        as B
+import           Data.Foldable          (foldl')
 import           Data.Maybe             (fromMaybe)
 import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8)
 import qualified ErrorsReplies          as R
-import           HandlersDataTypes
 import           Network.HTTP.Req
-import Data.Foldable (foldl')
 --
 
 {-- App types  --}
