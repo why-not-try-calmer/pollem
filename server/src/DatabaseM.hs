@@ -130,7 +130,7 @@ data MongoCreds = MongoCreds {
 } deriving (Eq, Show)
 
 initMongCreds :: MongoCreds
-initMongCreds = MongoCreds "cluster0-shard-00-02.cmocx.mongodb.net" "pollem-app" "FmUCY0OkZVHJ1MUY"
+initMongCreds = MongoCreds "cluster0-shard-00-01.cmocx.mongodb.net" "pollem-app" "FmUCY0OkZVHJ1MUY"
 
 {-
     FIX ME: MongoAtlas tends to shuffle around the role of 'primary' versus 'secondary' shard

@@ -100,6 +100,7 @@ main =
     let dat = SMCreate "1" "2" "3" "4" "5" "6" (Just "7") "8"
         doc = toBSON $ BSReq dat
     in  getAccess >>= \case
-            Just pipe -> try (runMongo pipe $ createPoll doc) >>= \case
-                Left er -> let e = er :: SomeException in liftIO $ print . show $ e
-                Right _ -> liftIO $ print "success"
+        Just pipe -> try (runMongo pipe $ createPoll doc) >>= \case
+            Left er -> let e = er :: SomeException in liftIO $ print . show $ e
+            Right _ -> liftIO $ print "success"
+        Nothing -> print "Auth failed. No pipe given."
