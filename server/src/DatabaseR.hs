@@ -29,7 +29,7 @@ import           Times                  (getNow)
 {-- Requests to db: types --}
 
 --
-data DbReq =
+data DbReqR =
     SCreate {
         create_poll_hash      :: B.ByteString,
         create_poll_email     :: B.ByteString,
@@ -97,7 +97,7 @@ getPollsNb = smembers "polls" >>= \case
     Left _    -> dbErr
     Right res -> pure . Right . length $ res
 
-submit :: DbReq -> Redis (Either (Err T.Text) (Ok T.Text))
+submit :: DbReqR -> Redis (Either (Err T.Text) (Ok T.Text))
 {- hash + token generated a first time from the handler -}
 submit (SAsk hash token) =
     let key = "user:" `B.append` hash
@@ -207,7 +207,7 @@ getPollMetaScores pollid = smembers ("participants_hashes:" `B.append` pollid) >
                 TxError _ -> dbErr
                 TxSuccess (answers, poll_meta_data) -> pure $ Right (answers, poll_meta_data)
 
-getPoll :: DbReq -> Redis (Either (Err T.Text) (Poll, Bool, Maybe [Int], Maybe B.ByteString))
+getPoll :: DbReqR -> Redis (Either (Err T.Text) (Poll, Bool, Maybe [Int], Maybe B.ByteString))
 {- Returns all data on a single poll, as a tuple
 <poll contents, whether is active, maybe the scores, maybe the secret> -}
 getPoll (SGet pollid) =

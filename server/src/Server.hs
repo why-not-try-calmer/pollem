@@ -24,9 +24,9 @@ import qualified Data.HashMap.Strict         as HMS
 import           Data.Maybe                  (fromMaybe)
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
-import           DatabaseR
 import           Database.Redis              (Connection, PortID (PortNumber),
                                               disconnect, info, runRedis)
+import           DatabaseR
 import qualified ErrorsReplies               as R
 import           Mailer
 import           Network.Wai
@@ -143,16 +143,16 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 hmap <- readMVar . pollcache $ env
                 case HMS.lookup pollid_b hmap of
                     -- poll, scores, last accessed datetime, secret
-                    Just (poll, active, mb_scores, _, mb_secret_stored) ->
+                    Just (PollInCache poll isactive mb_results _ hasSecret) ->
                         -- found in cache: exit early if the poll was not closed and we're missing auth credentials
                         -- NB: 'not closed' does not mean 'not running'; it could be not closed because the request arrives before the
                         -- sweeper closing after the endDate
-                        if runningButMissing now poll mb_secret_stored then stopWith badsecret else
+                        if runningButMissing now poll hasSecret then stopWith badsecret else
                         -- found in cache, not running or valid credentials: query db if poll is visible or was closed
-                        if poll_visible poll || not active then goFetchScores pollid_b env now else do
+                        if poll_visible poll || not isactive then goFetchScores pollid_b env now else do
                             -- updating cache
                             updateCache env pollid_b now
-                            finish poll mb_scores
+                            finish poll mb_results
                     -- not found in cache, querying db
                     Nothing -> liftIO (connDo (redisconn env) . getPoll $ SGet pollid_b) >>= \case
                         Left err -> stopWith err
@@ -178,8 +178,8 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                     Right (poll, active, mb_scores, mb_secret) -> do
                         updateCache env pollid now
                         finish poll mb_scores
-                updateCache env pollid now = modifyMVar_ (pollcache env) (pure . HMS.update (\(a, b, c, _, e) -> Just (a, b, c, now, e)) pollid)
-                addToCache env (poll, active, mb_scores, now, mb_secret_req) = modifyMVar_ (pollcache env) (pure . HMS.insert pollid_b (poll, active, mb_scores, now, mb_secret_req))
+                updateCache env pollid now = modifyMVar_ (pollcache env) (pure . HMS.update (\poll_in_cache -> Just (poll_in_cache { _lastLookUp = now })) pollid)
+                addToCache env (poll, active, mb_scores, now, mb_secret_req) = modifyMVar_ (pollcache env) (pure . HMS.insert pollid_b (PollInCache poll active mb_scores now mb_secret_req))
                 badsecret = R.Err R.BadSecret (mempty :: T.Text)
                 stopWith err = pure $ RespGet (R.renderError err) Nothing Nothing
                 finish poll mb_scores = pure $ RespGet "Ok" (Just poll) mb_scores

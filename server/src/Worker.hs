@@ -3,7 +3,7 @@
 
 module Worker where
 
-import           AppTypes                 (PollCache, initCache)
+import           AppTypes                 (PollCache, initCache, PollInCache (_lastLookUp))
 import           Control.Concurrent
 import           Control.Concurrent.Async
 import           Control.Exception
@@ -40,7 +40,7 @@ closeOnExpired conn mvar = do
         Left err -> print . R.renderError $ err
         Right _  -> print "Disabled and notified"
     {- purges cache from every entry that is more than 1-month old -}
-    modifyMVar_ mvar $ pure . HMS.filter (\(_,_,_,date, _) -> fresherThanOneMonth now date)
+    modifyMVar_ mvar $ pure . HMS.filter (fresherThanOneMonth now . _lastLookUp)
 
 runCloseOnExpired :: Connection -> PollCache -> IO (Async())
 runCloseOnExpired conn pollcache =

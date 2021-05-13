@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE OverloadedStrings    #-}
 
-module DatabaseM () where
+module DatabaseM where
 
 import           AppTypes
 import           Control.Exception              (SomeException, throwIO, try)
@@ -11,7 +11,12 @@ import qualified Data.Text                      as T
 import           Database.MongoDB
 import qualified Database.MongoDB.Transport.Tls as DbTLS
 {-
-    We're saving polls and users to MongoDB. Structure:
+    We take as input a command, inspect it, and see if we can accomodate using just the cache.
+    If we can, we accomodate. If we cannot, for pull all the data we need from MongoDB and return the data
+    to the caller, but before that, we dispatch a worker to update the cache after we've returned the requested
+    data.
+    
+    -- MongoDB structure --
     users -- collection
         {
             _id (= user hash in the Haskell code)
@@ -41,13 +46,26 @@ import qualified Database.MongoDB.Transport.Tls as DbTLS
             email
             answers (Array of Int)
         }
+
+    -- Redis structure --
+    polls (set of poll ids)
+    poll:{poll_id} (meta data about poll, including poll recipe)
+    users (set of user hash)
+    user:{hash} (hashmap about users)
+        token (ByteString)
+        verified (ByteString)
+        fingerprint (ByteString)
+    participants_hash:{poll_id} (set of hashes of participants to <poll_id>)
+    participants_email:{poll_id} (set of emails of participants to <poll_id>)
+    participants_fingerprint:{poll_id}  (set of fingerprints of participants 1to <poll_id>)
+    answers:{poll_id} (list of answers a Ints, where 0 is then interpreted as false and 1 true)
 -}
 --
 
 {- Mapping utilities from Redis to MongoDB -}
 
 --
-data DbReq =
+data DbReqM =
     SCreate {
         create_poll_hash      :: T.Text,
         create_poll_email     :: T.Text,
@@ -82,7 +100,7 @@ data DbReq =
     } |
     SGet { get_poll_id :: T.Text }
 
-data BSONable = BSPoll { _poll :: Poll } | BSReq { _req :: DbReq }
+data BSONable = BSPoll { _poll :: Poll } | BSReq { _req :: DbReqM }
 
 toBSON :: BSONable -> [Field]
 toBSON (BSPoll (Poll s e q d m v a)) =
@@ -166,8 +184,7 @@ getPollParticipations poll_id = find (select [] ("polls." `T.append` poll_id))
 {- Operations -}
 
 --
-main :: IO ()
-main = testAccess
+
 --
 
 {- Tests -}
