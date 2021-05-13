@@ -55,12 +55,24 @@ addRetryM retry = ask >>= \env -> do
     let retries = _retries env
     liftIO $ modifyMVar_ retries (\ls -> return (retry:ls))
 
+showRetriesM :: RequestManagerM ()
+showRetriesM = ask >>= \env -> do
+    let logs = _retries env
+    read <- liftIO $ readMVar logs
+    liftIO $ print . map fst $ read
+
 runRequestManagerM :: IO (Either ManagerErrors ())
 runRequestManagerM = do
     stores <- initStores
     let req = ("Creating poll", Mongo $ SMCreate "a" "b" "c" "d" "e" "f" (Just "g") "h")
-        operations = addRetryM req
+        operations = do
+            addRetryM req
+            showRetriesM
     runReaderT (runExceptT (unManager operations)) stores
+
+main = runRequestManagerM
+
+--- OLD
 
 initManager = do
     stores <- initStores
