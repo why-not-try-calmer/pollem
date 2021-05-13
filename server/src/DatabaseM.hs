@@ -5,7 +5,7 @@
 module DatabaseM where
 
 import           AppTypes
-import           Control.Exception              (SomeException, throwIO, try)
+import           Control.Exception              (SomeException, throwIO, try, Exception)
 import           Control.Monad.IO.Class         (MonadIO (liftIO))
 import qualified Data.Text                      as T
 import           Database.MongoDB
@@ -15,7 +15,7 @@ import qualified Database.MongoDB.Transport.Tls as DbTLS
     If we can, we accomodate. If we cannot, for pull all the data we need from MongoDB and return the data
     to the caller, but before that, we dispatch a worker to update the cache after we've returned the requested
     data.
-    
+
     -- MongoDB structure --
     users -- collection
         {
@@ -28,7 +28,8 @@ import qualified Database.MongoDB.Transport.Tls as DbTLS
         }
     polls -- collection with individual polls:
         {
-            _id (= author_hash in the Haskell code)
+            _id (Int)
+            author_hash
             author_email
             author_token
             recipe (= bytestring containing defining the poll)
@@ -66,7 +67,7 @@ import qualified Database.MongoDB.Transport.Tls as DbTLS
 
 --
 data DbReqM =
-    SCreate {
+    SMCreate {
         create_poll_hash      :: T.Text,
         create_poll_email     :: T.Text,
         create_poll_token     :: T.Text,
@@ -76,21 +77,21 @@ data DbReqM =
         create_poll_endDate   :: Maybe T.Text,
         create_poll_secret    :: T.Text
     } |
-    SClose  {
+    SMClose  {
         close_hash    :: T.Text,
         close_token   :: T.Text,
         close_poll_id :: T.Text
     } |
-    SAsk {
+    SMAsk {
         ask_hash  :: T.Text,
         ask_token :: T.Text
     } |
-    SConfirm {
+    SMConfirm {
         confirm_token       :: T.Text,
         confirm_fingerprint :: T.Text,
         confirm_hash        :: T.Text
     } |
-    STake {
+    SMTake {
         answers_hash        :: T.Text,
         answers_token       :: T.Text,
         answers_fingerprint :: T.Text,
@@ -98,7 +99,7 @@ data DbReqM =
         answers_poll_id     :: T.Text,
         answers_answers     :: [T.Text]
     } |
-    SGet { get_poll_id :: T.Text }
+    SMGet { get_poll_id :: T.Text }
 
 data BSONable = BSPoll { _poll :: Poll } | BSReq { _req :: DbReqM }
 
@@ -108,18 +109,18 @@ toBSON (BSPoll (Poll s e q d m v a)) =
     in  case e of
         Nothing      -> def
         Just endDate -> def ++ ["endDate" =: val endDate]
-toBSON (BSReq (SCreate h em tok i recipe start end sec)) =
-    let def = ["hash" =: val h, "email" =: val em, "token" =: val tok, "recipe" =: val recipe, "startDate" =: val start, "secret" =: sec]
+toBSON (BSReq (SMCreate h em tok pid recipe start end sec)) =
+    let def = ["_id" =: pid, "author_hash" =: val h, "email" =: val em, "token" =: val tok, "recipe" =: val recipe, "startDate" =: val start, "secret" =: sec]
     in  case end of
         Nothing      -> def
         Just endDate -> def ++ ["endDate" =: val endDate]
-toBSON (BSReq (SClose h t pid)) = ["hash" =: h, "token" =: t, "poll_id" =: pid]
-toBSON (BSReq (SAsk h t)) = ["hash" =: h, "token" =: t]
-toBSON (BSReq (SConfirm h fi t)) = ["hash" =: h, "fingerprint" =: fi, "token" =: t]
-toBSON (BSReq (STake h t fi em pid ans)) = ["hash" =: h, "token" =: t, "fingerprint" =: fi, "email" =: em, "poll_id" =: pid, "answers" =: ans]
+toBSON (BSReq (SMClose h t pid)) = ["_id" =: pid, "hash" =: h, "token" =: t]
+toBSON (BSReq (SMAsk h t)) = ["_id" =: h, "token" =: t]
+toBSON (BSReq (SMConfirm h fi t)) = ["_id" =: h, "fingerprint" =: fi, "token" =: t]
+toBSON (BSReq (SMTake h t fi em pid ans)) = ["_id" =: pid, "hash" =: h, "token" =: t, "fingerprint" =: fi, "email" =: em, "answers" =: ans]
 --
 
-{- Auth, Connection -}
+{- Auth, Connection , Runner -}
 
 --
 data MongoCreds = MongoCreds {
@@ -131,28 +132,26 @@ data MongoCreds = MongoCreds {
 initMongCreds :: MongoCreds
 initMongCreds = MongoCreds "cluster0-shard-00-02.cmocx.mongodb.net" "pollem-app" "FmUCY0OkZVHJ1MUY"
 
-testAccess :: IO ()
 {-
     FIX ME: MongoAtlas tends to shuffle around the role of 'primary' versus 'secondary' shard
     Make sure to call selectOK to avoid failing to authenticate
 -}
-testAccess =
+getAccess :: IO (Maybe Pipe)
+getAccess =
     let creds = initMongCreds
     in  try (DbTLS.connect (shard creds) (PortNumber 27017)) >>= \case
-        Left e -> let e'= e :: SomeException in print ("Error while trying to connect: " ++ show e)
+        Left e -> let e'= e :: SomeException in do
+            print ("Error while trying to connect: " ++ show e)
+            pure Nothing
         Right pipe -> do
             authorized <- access pipe UnconfirmedWrites "admin" $ auth (user creds) (pwd creds)
-            if authorized then access pipe master "pollem" runIt else throwIO $ userError "Failed to authenticate."
-            close pipe
-    where
-        runIt = do
-            --createPoll ["_id" =: "007"]
-            insertParticipation "007" "myhash" "lelaStar" "finger" [0,1,0]
-            insertParticipation "007" "myhash" "vanessLane" "finger" [1,1,0]
-            getPollParticipations "007" >>= rest >>= liftIO . print
+            if authorized then pure $ Just pipe
+            else pure Nothing
+
+runMongo pipe = access pipe master "pollem"
 --
 
-{- Users -}
+{- Actions -}
 
 --
 checkIfExistsUser hash = findOne (select ["_id" =: hash] "users") >>= \case
@@ -160,8 +159,8 @@ checkIfExistsUser hash = findOne (select ["_id" =: hash] "users") >>= \case
     Nothing   -> pure False
 getIfExistsUser hash = findOne (select ["_id" =: hash] "users")
 getIfUserWithToken hash token = findOne (select ["_id" =: hash, "token" =: token] "users")
-getIfUserWithFields hash otherfields = findOne (select (("_id" =: hash) : otherfields) "users")
-updateUserWith hash otherfields = upsert (select (("_id" =: hash) : otherfields) "users")
+getIfUserWithFields hash fields = findOne (select fields "users")
+updateUserWith fields = upsert (select fields "users")
 createUser hash fingerprint = insert "users" ["_id" =: hash, "fingerprint" =: fingerprint, "verified" =: "true"]
 --
 
@@ -169,9 +168,10 @@ createUser hash fingerprint = insert "users" ["_id" =: hash, "fingerprint" =: fi
 
 --
 getIfExistsPoll poll_id = findOne (select ["_id" =: poll_id] "polls")
-getIfPollWithFields poll_id otherfields = findOne (select (("_id" =: poll_id) : otherfields) "polls")
-createPoll poll_id otherfields = insert "polls" (("_id" =: poll_id) : otherfields)
-updatePollWith poll_id otherfields = upsert (select (("_id" =: poll_id) : otherfields) "polls")
+getIfPollWithFields fields = findOne (select fields "polls")
+createPoll :: MonadIO m => Document -> Action m Value
+createPoll = insert "polls"
+updatePollWith fields = upsert (select fields "polls")
 --
 
 {- Participations -}
@@ -179,16 +179,3 @@ updatePollWith poll_id otherfields = upsert (select (("_id" =: poll_id) : otherf
 --
 insertParticipation poll_id hash email fingerprint answers = insert ("polls." `T.append` poll_id) ["poll_id" =: poll_id, "email" =: email, "fingerprint" =: fingerprint, "answers"=: answers]
 getPollParticipations poll_id = find (select [] ("polls." `T.append` poll_id))
---
-
-{- Operations -}
-
---
-
---
-
-{- Tests -}
-
---
-makeAPoll :: Poll
-makeAPoll = Poll "start_date" (Just "end_date") "question" "description" True True ["Answer A", "Answer B"]
