@@ -1,12 +1,14 @@
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
 
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Caching where
 
 import           AppTypes               (Poll)
 import           Control.Concurrent
 import           Control.Exception
+import           Control.Monad.Except
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Control.Monad.Reader   (MonadReader (ask),
                                          ReaderT (runReaderT), withReaderT)
@@ -41,22 +43,46 @@ type Retry = (T.Text, Request)
 
 type Retries = [Retry]
 
-data RequestManager = RequestManager { _in_memory :: PollCache, _retries :: MVar Retries, _queue :: Chan Request }
+data Stores = Stores { _in_memory :: PollCache, _retries :: MVar Retries, _queue :: Chan Request }
 
-initRequestManager :: IO RequestManager
-initRequestManager = do
+data ManagerErrors = A | B
+
+newtype RequestManagerM a = RequestManagerM { unManager :: ExceptT ManagerErrors (ReaderT Stores IO) a }
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader Stores, MonadError ManagerErrors)
+
+addRetryM :: Retry -> RequestManagerM ()
+addRetryM retry = ask >>= \env -> do
+    let retries = _retries env
+    liftIO $ modifyMVar_ retries (\ls -> return (retry:ls))
+
+runRequestManagerM :: IO (Either ManagerErrors ())
+runRequestManagerM = do
+    stores <- initStores
+    let req = ("Creating poll", Mongo $ SMCreate "a" "b" "c" "d" "e" "f" (Just "g") "h")
+        operations = addRetryM req
+    runReaderT (runExceptT (unManager operations)) stores
+
+initManager = do
+    stores <- initStores
+    let req = ("Creating poll", Mongo $ SMCreate "a" "b" "c" "d" "e" "f" (Just "g") "h")
+        actions = addRetry req
+    runReaderT actions stores
+    print "ok"
+
+initStores :: IO Stores
+initStores = do
     q <- liftIO newChan
     l <- liftIO $ newMVar []
     mem <- liftIO $ newMVar HMS.empty
-    return $ RequestManager mem l q
+    return $ Stores mem l q
 
-showRetries :: ReaderT RequestManager IO ()
+showRetries :: ReaderT Stores IO ()
 showRetries = ask >>= \env -> do
     let logs = _retries env
     read <- liftIO $ readMVar logs
     liftIO $ print . map fst $ read
 
-addRetry :: Retry -> ReaderT RequestManager IO ()
+addRetry :: Retry -> ReaderT Stores IO ()
 addRetry retry = ask >>= \env -> do
     let retries = _retries env
     liftIO $ modifyMVar_ retries (\ls -> return (retry:ls))
@@ -64,18 +90,16 @@ addRetry retry = ask >>= \env -> do
 exec :: Exception e => Request -> IO (Either e ())
 exec (Mongo create_req@SMCreate{..}) =
     let doc = toBSON $ BSReq create_req
-    in  do
-        liftIO . print $ doc
-        getAccess >>= \case
-            Just pipe -> try $ runMongo pipe (createPoll doc) >> print "RunMongo: OK"
-            Nothing   -> throwIO $ userError "Failed to connect"
+    in  getAccess >>= \case
+        Just pipe -> try $ runMongo pipe (createPoll doc) >> print "RunMongo: OK"
+        Nothing   -> throwIO $ userError "Failed to connect"
 
-enqueue :: Request -> ReaderT RequestManager IO ()
+enqueue :: Request -> ReaderT Stores IO ()
 enqueue req = ask >>= \env -> do
     let q = _queue env
     liftIO $ writeChan q req
 
-dequeue :: ReaderT RequestManager IO ()
+dequeue :: ReaderT Stores IO ()
 dequeue = ask >>= \env -> do
     let q = _queue env
         retries = _retries env
@@ -83,24 +107,17 @@ dequeue = ask >>= \env -> do
     liftIO (exec nextReq) >>= \case
         Left e ->
             let e' = e :: SomeException
-            in liftIO (print "Failed to dequeue") >> addRetry (T.pack . show $ e', nextReq)
+            in  do
+                liftIO $ print "Failed to dequeue"
+                addRetry (T.pack . show $ e', nextReq)
         Right _ -> liftIO $ print "Dequeued!"
 
 main' = do
-    env <- initRequestManager
-    let req = ("Creating poll", Mongo $ SMCreate "1" "2" "3" "4" "5" "6" (Just "7") "8")
+    env <- initStores
+    let req = ("Creating poll", Mongo $ SMCreate "a" "b" "c" "d" "e" "f" (Just "g") "h")
         operations = do
             addRetry req
             showRetries
             enqueue (snd req)
             dequeue
     runReaderT operations env
-
-main = 
-    let dat = SMCreate "1" "2" "3" "4" "5" "6" (Just "7") "8"
-        doc = toBSON $ BSReq dat
-    in  getAccess >>= \case
-        Just pipe -> try (runMongo pipe $ createPoll doc) >>= \case
-            Left er -> let e = er :: SomeException in liftIO $ print . show $ e
-            Right _ -> liftIO $ print "success"
-        Nothing -> print "Auth failed. No pipe given."
