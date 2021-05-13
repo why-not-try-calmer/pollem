@@ -1,4 +1,3 @@
---{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Caching where
@@ -37,8 +36,6 @@ data Request = Redis { _redis :: DbReqR } | Mongo { _mongo :: DbReqM }
 type Logs = [(T.Text, T.Text)]
 
 data RequestManager = RequestManager { _in_memory :: PollCache, _logs :: MVar Logs, _queue :: Chan Request }
-
---newtype LoggingRequestManager a = LoggingRequestManager { getReader :: ReaderT RequestManager IO a } deriving (Functor, Applicative, Monad, MonadIO, MonadReader RequestManager)
 
 initRequestManager :: IO RequestManager
 initRequestManager = do
