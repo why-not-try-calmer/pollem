@@ -46,18 +46,18 @@ type Retries = [Retry]
 
 data Stores = Stores { _in_memory :: PollCache, _retries :: MVar Retries, _queue :: Chan Request, _dbpool :: Pipe }
 
-data ManagerErrors = MongoConn | SomethingElse
+data RequestManagerErrors = MongoConn T.Text | SomethingElse T.Text deriving (Show)
 
-newtype RequestManager a = RequestManager { unManager :: ExceptT ManagerErrors (ReaderT Stores IO) a }
-    deriving (Functor, Applicative, Monad, MonadIO, MonadReader Stores, MonadError ManagerErrors)
+newtype RequestManager a = RequestManager { unManager :: ExceptT RequestManagerErrors (ReaderT Stores IO) a }
+    deriving (Functor, Applicative, Monad, MonadIO, MonadError RequestManagerErrors, MonadReader Stores)
 
-initStores :: IO (Either ManagerErrors Stores)
+initStores :: IO (Either RequestManagerErrors Stores)
 initStores = do
     q <- newChan
     l <- newMVar []
     mem <- newMVar HMS.empty
     getAccess >>= \case
-        Nothing   -> return . Left $ MongoConn
+        Nothing   -> return . Left $ MongoConn "Failed to acquire pipe."
         Just pipe -> return . Right $ Stores mem l q pipe
 
 addRetry :: Retry -> RequestManager ()
@@ -93,13 +93,16 @@ dequeue = ask >>= \env -> do
         pool = _dbpool env
         retries = _retries env
     nextReq <- liftIO $ readChan q
-    liftIO (exec pool nextReq)
+    liftIO (try $ exec pool nextReq) >>= \case
+        -- catching all 'natural' MongoDB errors and rethrowing inside the RequestManager monad
+        Left err -> let e = err :: SomeException in throwError $ MongoConn (T.pack . show $ err)
+        Right _ -> pure ()
 
-runRequestManager :: IO (Either ManagerErrors ())
+runRequestManager :: IO ()
 runRequestManager =
     initStores >>= \case
     Right stores ->
-        let req = ("Creating poll", Mongo $ SMCreate "ad" "ri" "en" "es" "td" "er" (Just "et") "our")
+        let req = ("Creating poll", Mongo $ SMCreate "ad" "ri" "en" "ET" "td" "er" (Just "et") "our")
             operations = do
                 addRetry req
                 showRetries
@@ -107,6 +110,8 @@ runRequestManager =
                 showRetries
                 enqueue (snd req)
                 dequeue
-        in  runReaderT (runExceptT (unManager operations)) stores
+        in  runReaderT (runExceptT (unManager operations)) stores >>= \case
+                Left err -> print $ "runReaderT: caught this error: " ++ show err
+                Right _ -> print "Ok"
 
 main = runRequestManager

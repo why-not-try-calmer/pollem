@@ -157,12 +157,10 @@ getAccess =
             if authorized then pure $ Just pipe
             else pure Nothing
 
-runMongo pipe action = try (access pipe master "pollem" action) >>= \case
-    Left err ->
-        let e = err :: SomeException
-        in  throwError . userError $ "Failed to run action, got this error " ++ show e
-    Right v -> pure ()
-    --
+runMongo pipe action = do
+    access pipe master "pollem" action
+    pure ()
+--
 
 {- Actions -}
 
