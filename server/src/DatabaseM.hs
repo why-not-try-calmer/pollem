@@ -4,11 +4,19 @@
 
 module DatabaseM where
 
-import           AppTypes
-import           Control.Exception              (SomeException, throwIO, try, Exception)
+import           AppTypes                       (Poll (Poll))
+import           Control.Exception              (Exception, SomeException,
+                                                 throwIO, try)
+import           Control.Monad.Except           (MonadError (throwError))
 import           Control.Monad.IO.Class         (MonadIO (liftIO))
 import qualified Data.Text                      as T
-import           Database.MongoDB
+import           Database.MongoDB               (AccessMode (UnconfirmedWrites),
+                                                 Action, Document, Field, Pipe,
+                                                 PortID (PortNumber),
+                                                 Select (select), Val (val),
+                                                 Value, access, auth, find,
+                                                 findOne, insert, master,
+                                                 upsert, (=:))
 import qualified Database.MongoDB.Transport.Tls as DbTLS
 {-
     We take as input a command, inspect it, and see if we can accomodate using just the cache.
@@ -36,6 +44,7 @@ import qualified Database.MongoDB.Transport.Tls as DbTLS
             startDate
             endDate (optional)
             secret (= set by default assuming that the creator wants to restrict the poll to only a number of viewers)
+            active (Bool)
         }
     polls.{poll_id} -- collection registering singular actions against the poll, i.e. participation
         {
@@ -148,8 +157,12 @@ getAccess =
             if authorized then pure $ Just pipe
             else pure Nothing
 
-runMongo pipe = access pipe master "pollem"
---
+runMongo pipe action = try (access pipe master "pollem" action) >>= \case
+    Left err ->
+        let e = err :: SomeException
+        in  throwError . userError $ "Failed to run action, got this error " ++ show e
+    Right v -> pure ()
+    --
 
 {- Actions -}
 
@@ -159,9 +172,11 @@ checkIfExistsUser hash = findOne (select ["_id" =: hash] "users") >>= \case
     Nothing   -> pure False
 getIfExistsUser hash = findOne (select ["_id" =: hash] "users")
 getIfUserWithToken hash token = findOne (select ["_id" =: hash, "token" =: token] "users")
-getIfUserWithFields hash fields = findOne (select fields "users")
-updateUserWith fields = upsert (select fields "users")
+updateUserWith :: (MonadIO m, Val v) => v -> Document -> Action m ()
+updateUserWith hash = upsert (select ["_id" =: hash] "users")
 createUser hash fingerprint = insert "users" ["_id" =: hash, "fingerprint" =: fingerprint, "verified" =: "true"]
+userAsk hash token = updateUserWith hash ["token" =: token]
+userConfirm hash token fingerprint = updateUserWith hash ["token" =: token, "fingerprint" =: fingerprint]
 --
 
 {- Polls -}
@@ -171,11 +186,14 @@ getIfExistsPoll poll_id = findOne (select ["_id" =: poll_id] "polls")
 getIfPollWithFields fields = findOne (select fields "polls")
 createPoll :: MonadIO m => Document -> Action m Value
 createPoll = insert "polls"
-updatePollWith fields = upsert (select fields "polls")
+updatePollWith :: (MonadIO m, Val v) => v -> Document -> Action m ()
+updatePollWith poll_id = upsert (select ["_id" =: poll_id] "polls")
+closePoll poll_id = updatePollWith poll_id ["active" =: "false"]
 --
 
 {- Participations -}
 
 --
-insertParticipation poll_id hash email fingerprint answers = insert ("polls." `T.append` poll_id) ["poll_id" =: poll_id, "email" =: email, "fingerprint" =: fingerprint, "answers"=: answers]
+insertParticipation :: MonadIO m => T.Text -> Document -> Action m Value
+insertParticipation poll_id = insert ("polls." `T.append` poll_id)
 getPollParticipations poll_id = find (select [] ("polls." `T.append` poll_id))
