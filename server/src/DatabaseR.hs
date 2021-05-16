@@ -58,7 +58,7 @@ data DbReqR =
         answers_hash        :: B.ByteString,
         answers_token       :: B.ByteString,
         answers_fingerprint :: B.ByteString,
-        answers_emai        :: B.ByteString,
+        answers_email        :: B.ByteString,
         answers_poll_id     :: B.ByteString,
         answers_answers     :: [B.ByteString]
     } |
