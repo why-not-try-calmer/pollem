@@ -126,15 +126,14 @@ $(deriveJSON defaultOptions ''RespMyHistory)
 type PollCreator = MVar (Int, SystemDRG)
 
 data PollInCache = PollInCache {
-    _poll :: Poll,
-    _isActive :: Bool,
-    _results :: Maybe [Int],
+    _poll       :: Poll,
+    _isActive   :: Bool,
+    _results    :: Maybe [Int],
     _lastLookUp :: UTCTime,
-    _hasSecret :: Maybe T.Text
+    _hasSecret  :: Maybe T.Text
 }
 
 type PollCache = MVar (HMS.HashMap B.ByteString PollInCache)
-
 initState :: IO PollCreator
 initState = do
     drg <- getSystemDRG

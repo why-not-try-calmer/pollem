@@ -1,11 +1,11 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RecordWildCards            #-}
 
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Caching where
+module HandlersCaching where
 
-import           AppTypes               (Poll (..))
+import           AppTypes               (Poll (..), PollCache)
 import           Control.Concurrent
 import           Control.Exception
 import           Control.Monad.Except
@@ -17,9 +17,9 @@ import qualified Data.HashMap.Strict    as HMS
 import qualified Data.Text              as T
 import           Data.Time              (UTCTime)
 import           Database.MongoDB       (Pipe)
+import           Database.Redis         (Connection)
 import           DatabaseM
 import           DatabaseR
-import Database.Redis (Connection)
 {-
     The Request Manager takes a Request for input and yields a result to the caller (a servant handler).
     The logic is simple: it looks up the PollCache if the Request can be satisfied, then looks up Redis, and if the request still
@@ -29,37 +29,52 @@ import Database.Redis (Connection)
     works to repopulate either Redis or the in-memory cache even after the Request Manager has returned the requested
     result.
 -}
-data PollInCache = PollInCache {
-    _poll       :: Poll,
-    _isActive   :: Bool,
-    _results    :: Maybe [Int],
-    _lastLookUp :: UTCTime,
-    _hasSecret  :: Maybe T.Text
-}
+data Connectors = Connectors { _mongopipe :: Pipe, _redisconnection :: Connection }
 
-data Request = Redis { _redis :: DbReqR } | Mongo { _mongo :: DbReqM }
+data Stores = Stores { _inmem :: PollCache, _retries :: MVar Retries, _queue :: Chan Target, _connectors :: Connectors }
 
-type Retry = (T.Text, Request)
+data Target = Redis { _redis :: DbReqR } | Mongo { _mongo :: DbReqM }
+
+type Retry = (T.Text, Target)
 
 type Retries = [Retry]
 
-data Connectors = Connectors { _mongopipe :: Pipe, _redisconnection :: Connection }
+data CmdManErrors = MongoErr T.Text | RedisErr T.Text | CacheErr T.Text deriving (Show)
 
-data Stores = Stores { _retries :: MVar Retries, _queue :: Chan Request, _connectors :: Connectors }
+newtype RequestManager a = RequestManager { unManager :: ExceptT CmdManErrors (ReaderT Stores IO) a }
+    deriving (Functor, Applicative, Monad, MonadIO, MonadError CmdManErrors, MonadReader Stores)
 
-data RequestManagerErrors = MongoErr T.Text | RedisErr T.Text | CacheErr T.Text deriving (Show)
-
-newtype RequestManager a = RequestManager { unManager :: ExceptT RequestManagerErrors (ReaderT Stores IO) a }
-    deriving (Functor, Applicative, Monad, MonadIO, MonadError RequestManagerErrors, MonadReader Stores)
-
-initStores :: IO (Either RequestManagerErrors Stores)
-initStores = do
+initStores :: PollCache -> IO (Either CmdManErrors Stores)
+initStores cache = do
     q <- newChan
     l <- newMVar []
     connector <- initRedisConnection connInfo
     getAccess >>= \case
         Nothing   -> return . Left $ MongoErr "Failed to acquire pipe."
-        Just pipe -> return . Right $ Stores l q (Connectors pipe connector)
+        Just pipe -> return . Right $ Stores cache l q (Connectors pipe connector)
+
+initRequestManager :: PollCache -> IO ()
+initRequestManager cache = 
+    initStores cache >>= \case
+    Left _ -> throwIO $ userError "Failed to initialize Cache."
+    Right stores -> runReaderT (runExceptT (unManager (pure ()))) stores >>= \case
+        Left err -> print $ "runReaderT: caught this error: " ++ show err
+        Right _ -> print "runReaderT: Request manager initialized."
+
+runRequestManager :: RequestManager () -> RequestManager ()
+runRequestManager operations = ask >>= \stores -> do
+    let req = ("Creating poll", Mongo $ SMCreate "ad" "ri" "en" "ET" "td" "er" (Just "et") "our")
+    liftIO $ runReaderT (runExceptT (unManager operations)) stores >>= \case
+        Left err -> print $ "runReaderT: caught this error: " ++ show err
+
+data RequestT a = AskToken a | ConfirmToken a | Create a | Close a | Get a | Take a | MyHistory a deriving (Show)
+
+newtype Request request = Request (RequestT request) deriving (Show)
+
+handleRequest :: Request a -> RequestManager ()
+handleRequest (Request (AskToken t)) = 
+    let req = ("Creating poll", Mongo $ SMCreate "ad" "ri" "en" "ET" "td" "er" (Just "et") "our")
+    in  runRequestManager $ addRetry req
 
 addRetry :: Retry -> RequestManager ()
 addRetry retry = ask >>= \env -> do
@@ -72,7 +87,7 @@ showRetries = ask >>= \env -> do
     read <- liftIO $ readMVar logs
     liftIO $ print . map fst $ read
 
-exec :: Connectors -> Request -> IO ()
+exec :: Connectors -> Target -> IO ()
 exec (Connectors pipe _) (Mongo create_req@SMCreate{..}) =
     let doc = toBSON $ BSReq create_req
     in  runMongo pipe (createPoll doc)
@@ -83,7 +98,7 @@ exec (Connectors pipe _) (Mongo take_req@SMTake{..}) =
     let doc = toBSON $ BSReq take_req
     in  runMongo pipe (insertParticipation answers_poll_id doc)
 
-enqueue :: Request -> RequestManager ()
+enqueue :: Target -> RequestManager ()
 enqueue req = ask >>= \env -> do
     let q = _queue env
     liftIO $ writeChan q req
@@ -98,22 +113,3 @@ dequeue = ask >>= \env -> do
         -- catching all 'natural' MongoDB errors and rethrowing inside the RequestManager monad
         Left err -> let e = err :: SomeException in throwError $ CacheErr (T.pack . show $ err)
         Right _ -> pure ()
-
-runRequestManager :: IO ()
-runRequestManager =
-    initStores >>= \case
-    Left _ -> throwIO $ userError "Failed to initialize Cache."
-    Right stores ->
-        let req = ("Creating poll", Mongo $ SMCreate "ad" "ri" "en" "ET" "td" "er" (Just "et") "our")
-            operations = do
-                addRetry req
-                showRetries
-                addRetry req
-                showRetries
-                enqueue (snd req)
-                dequeue
-        in  runReaderT (runExceptT (unManager operations)) stores >>= \case
-                Left err -> print $ "runReaderT: caught this error: " ++ show err
-                Right _ -> print "Ok"
-
-main = runRequestManager
