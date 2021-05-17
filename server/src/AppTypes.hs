@@ -26,19 +26,19 @@ data Poll = Poll {
     poll_multiple    :: Bool,
     poll_visible     :: Bool,
     poll_answers     :: [T.Text]
-} deriving (Show, Eq)
+}   deriving (Show, Eq)
 $(deriveJSON defaultOptions ''Poll)
 
 newtype ReqAskToken = ReqAskToken {
     ask_email       :: T.Text
-}
+}   deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqAskToken)
 
 data ReqConfirmToken = ReqConfirmToken {
     confirm_token       :: T.Text,
     confirm_fingerprint :: T.Text,
     confirm_email       :: T.Text
-}
+}   deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqConfirmToken)
 
 data ReqCreate = ReqCreate {
@@ -58,6 +58,11 @@ data ReqClose = ReqClose {
 } deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqClose)
 
+data ReqGet = ReqGet {
+    get_int    :: Int,
+    get_mb_str :: Maybe String
+}  deriving (Eq,Show)
+
 data ReqTake = ReqTake {
     take_hash        :: T.Text,
     take_token       :: T.Text,
@@ -71,7 +76,7 @@ $(deriveJSON defaultOptions ''ReqTake)
 data ReqMyHistory = ReqMyHistory {
     myhistory_hash  :: T.Text,
     myhistory_token :: T.Text
-}
+}  deriving (Eq, Show)
 $(deriveJSON defaultOptions ''ReqMyHistory)
 --
 

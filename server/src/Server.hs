@@ -25,7 +25,7 @@ import           Data.Maybe                  (fromMaybe)
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
 import           Database.Redis              (Connection, PortID (PortNumber),
-                                              disconnect, info, runRedis)
+                                              disconnect, info, runRedis, RedisType (String))
 import           DatabaseR
 import qualified ErrorsReplies               as R
 import           Mailer

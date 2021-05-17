@@ -5,7 +5,7 @@
 
 module HandlersCaching where
 
-import           AppTypes               (Poll (..), PollCache)
+import           AppTypes
 import           Control.Concurrent
 import           Control.Exception
 import           Control.Monad.Except
@@ -29,6 +29,11 @@ import           DatabaseR
     works to repopulate either Redis or the in-memory cache even after the Request Manager has returned the requested
     result.
 -}
+--
+
+{- Requests Manager -}
+
+--
 data Connectors = Connectors { _mongopipe :: Pipe, _redisconnection :: Connection }
 
 data Stores = Stores { _inmem :: PollCache, _retries :: MVar Retries, _queue :: Chan Target, _connectors :: Connectors }
@@ -54,27 +59,18 @@ initStores cache = do
         Just pipe -> return . Right $ Stores cache l q (Connectors pipe connector)
 
 initRequestManager :: PollCache -> IO ()
-initRequestManager cache = 
+initRequestManager cache =
     initStores cache >>= \case
     Left _ -> throwIO $ userError "Failed to initialize Cache."
     Right stores -> runReaderT (runExceptT (unManager (pure ()))) stores >>= \case
         Left err -> print $ "runReaderT: caught this error: " ++ show err
-        Right _ -> print "runReaderT: Request manager initialized."
+        Right _  -> print "runReaderT: Request manager initialized."
 
-runRequestManager :: RequestManager () -> RequestManager ()
-runRequestManager operations = ask >>= \stores -> do
-    let req = ("Creating poll", Mongo $ SMCreate "ad" "ri" "en" "ET" "td" "er" (Just "et") "our")
-    liftIO $ runReaderT (runExceptT (unManager operations)) stores >>= \case
+runRequestManagerWith :: Stores -> RequestManager a -> IO ()
+runRequestManagerWith stores operations =
+    runReaderT (runExceptT (unManager operations)) stores >>= \case
         Left err -> print $ "runReaderT: caught this error: " ++ show err
-
-data RequestT a = AskToken a | ConfirmToken a | Create a | Close a | Get a | Take a | MyHistory a deriving (Show)
-
-newtype Request request = Request (RequestT request) deriving (Show)
-
-handleRequest :: Request a -> RequestManager ()
-handleRequest (Request (AskToken t)) = 
-    let req = ("Creating poll", Mongo $ SMCreate "ad" "ri" "en" "ET" "td" "er" (Just "et") "our")
-    in  runRequestManager $ addRetry req
+        Right _  -> pure ()
 
 addRetry :: Retry -> RequestManager ()
 addRetry retry = ask >>= \env -> do
@@ -113,3 +109,22 @@ dequeue = ask >>= \env -> do
         -- catching all 'natural' MongoDB errors and rethrowing inside the RequestManager monad
         Left err -> let e = err :: SomeException in throwError $ CacheErr (T.pack . show $ err)
         Right _ -> pure ()
+--
+
+{- Requests -}
+
+--
+handleRequests :: Stores -> DbReqR -> IO ()
+handleRequests stores (SAsk hash token) =
+    let newreq = ("Creating poll", Mongo $ SMCreate "ad" "ri" "en" "ET" "td" "er" (Just "et") "our")
+    in  do
+        runRequestManagerWith stores $ do
+            addRetry newreq
+            showRetries
+        print "ok"
+
+main :: IO ()
+main = do
+    cache <- initCache
+    initStores cache >>= \case
+        Right stores -> handleRequests stores (SAsk "1" "2")
