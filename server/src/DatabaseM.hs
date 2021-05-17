@@ -9,15 +9,18 @@ import           Control.Exception              (Exception, SomeException,
                                                  throwIO, try)
 import           Control.Monad.Except           (MonadError (throwError))
 import           Control.Monad.IO.Class         (MonadIO (liftIO))
+import           Data.Maybe                     (fromMaybe)
 import qualified Data.Text                      as T
 import           Database.MongoDB               (AccessMode (UnconfirmedWrites),
                                                  Action, Document, Field, Pipe,
                                                  PortID (PortNumber),
-                                                 Select (select), Val (val),
-                                                 Value, access, auth, find,
-                                                 findOne, insert, master,
-                                                 upsert, (=:))
+                                                 Select (select),
+                                                 Val (cast', val), Value,
+                                                 access, auth, find, findOne,
+                                                 insert, master, upsert,
+                                                 valueAt, (=:))
 import qualified Database.MongoDB.Transport.Tls as DbTLS
+import           ErrorsReplies
 {-
     We take as input a command, inspect it, and see if we can accomodate using just the cache.
     If we can, we accomodate. If we cannot, for pull all the data we need from MongoDB and return the data
@@ -195,3 +198,30 @@ closePoll poll_id = updatePollWith poll_id ["active" =: "false"]
 insertParticipation :: MonadIO m => T.Text -> Document -> Action m Value
 insertParticipation poll_id = insert ("polls." `T.append` poll_id)
 getPollParticipations poll_id = find (select [] ("polls." `T.append` poll_id))
+--
+
+{- Handler -}
+
+--
+finishOkWith :: MonadIO m => T.Text -> m (Either (Err T.Text) (Ok T.Text))
+finishOkWith = pure . Right . Ok
+
+stopErrWith :: MonadIO m => T.Text -> m (Either (Err T.Text) (Ok T.Text))
+stopErrWith = pure . Left . Err Database
+
+submitM :: MonadIO m => DbReqM -> Action m (Either (Err T.Text) (Ok T.Text))
+submitM (SMAsk hash token) = do
+    exists <- checkIfExistsUser hash
+    if exists then userAsk hash token else do createUser hash ""; pure ()
+    finishOkWith "Stored new user to to MongoDb"
+submitM (SMConfirm token fingerprint hash) = do
+    mb_doc <- getIfExistsUser hash
+    case mb_doc of
+        Nothing -> stopErrWith "Unable to find document"
+        Just doc -> do
+            let matched = Just token == (cast' . valueAt "token" $ doc :: Maybe T.Text)
+            if matched then do
+                userConfirm hash token fingerprint
+                finishOkWith "User confirmed."
+            else stopErrWith "Tokens don't match"
+

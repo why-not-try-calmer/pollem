@@ -58,11 +58,12 @@ data DbReqR =
         answers_hash        :: B.ByteString,
         answers_token       :: B.ByteString,
         answers_fingerprint :: B.ByteString,
-        answers_email        :: B.ByteString,
+        answers_email       :: B.ByteString,
         answers_poll_id     :: B.ByteString,
         answers_answers     :: [B.ByteString]
     } |
     SGet { get_poll_id :: B.ByteString }
+    deriving (Show)
 --
 
 {-- Requests to db: functions --}
@@ -97,45 +98,44 @@ getPollsNb = smembers "polls" >>= \case
     Left _    -> dbErr
     Right res -> pure . Right . length $ res
 
-submit :: DbReqR -> Redis (Either (Err T.Text) (Ok T.Text))
+submitR :: DbReqR -> Redis (Either (Err T.Text) (Ok T.Text))
 {- hash + token generated a first time from the handler -}
-submit (SAsk hash token) =
+submitR (SAsk hash token) = do
     let key = "user:" `B.append` hash
-    in  do
-        liftIO . print $ key
-        exists key >>= \case
-            Left err -> dbErr
-            Right verdict ->
-                if verdict then do
-                    hmset key [("token", token)]
-                    pure . Right . R.Ok $ "Bear in mind that this email address is registered already. I will send you a verification email nonetheless. You don't need to use it unless you want to re-authenticate your email address."
-                else do
-                    hmset key [("token", token),("verified", "false")] -- this structure is not typed! perhaps do it
-                    pure . Right . R.Ok $ "Thanks, please check your email. Expect between 30s and 5 minutes latency from the email provider."
-submit (SConfirm token fingerprint hash) = -- hash generated from the handler, token sent by the user, which on match with DB proves that the hash is from a confirmed email address.
+    exists key >>= \case
+        Left err -> dbErr
+        Right verdict ->
+            if verdict then do
+                hmset key [("token", token)]
+                pure . Right . R.Ok $ "Bear in mind that this email address is registered already. I will send you a verification email nonetheless. You don't need to use it unless you want to re-authenticate your email address."
+            else do
+                hmset key [("token", token),("verified", "false")] -- this structure is not typed! perhaps do it
+                pure . Right . R.Ok $ "Thanks, please check your email. Expect between 30s and 5 minutes latency from the email provider."
+submitR (SConfirm token fingerprint hash) = do
+    -- hash generated from the handler, token sent by the user, which on match with DB proves that the hash is from a confirmed email address.
     let key = "user:" `B.append` hash
-    in  exists key >>= \case
+    exists key >>= \case
         Left err -> pure . Left . R.Err Database $ T.pack . show $ err
         Right found ->
             if not found then noUser
             else hget key "token" >>= \case
-                Left _ -> dbErr
-                Right mb_saved_token -> case mb_saved_token of
-                    Nothing -> noUser
-                    Just saved_token ->
-                        if token == saved_token then do
-                            hmset key [("fingerprint", fingerprint),("verified","true")]
-                            sadd "users" [hash]
-                            pure . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
-                        else noUser
-submit (SCreate hash email token pollid recipe startDate mb_endDate secret) =
+            Left _ -> dbErr
+            Right mb_saved_token -> case mb_saved_token of
+                Nothing -> noUser
+                Just saved_token ->
+                    if token == saved_token then do
+                        hmset key [("fingerprint", fingerprint),("verified","true")]
+                        sadd "users" [hash]
+                        pure . Right . R.Ok $ "Thanks, you've successfully confirmed your email address."
+                    else noUser
+submitR (SCreate hash email token pollid recipe startDate mb_endDate secret) = do
     let pollid_txt = decodeUtf8 pollid
         key = "user:" `B.append` hash
         payload =
             let base = [("author_hash",hash),("author_email", email),("secret",secret),("recipe",recipe),("startDate",startDate),("active","true")]
                 endDate = (\v -> pure ("endDate" :: B.ByteString , v)) =<< mb_endDate
             in  base ++ catMaybes [endDate]
-    in  exists ("poll:" `B.append` pollid) >>= \case
+    exists ("poll:" `B.append` pollid) >>= \case
         Left err -> dbErr
         Right verdict ->
             if verdict then pure . Left . R.Err PollExists $ pollid_txt
@@ -149,46 +149,47 @@ submit (SCreate hash email token pollid recipe startDate mb_endDate secret) =
                     ) >>= \case
                         TxSuccess _ -> pure .  Right . R.Ok $ "Added poll " `T.append` pollid_txt
                         _ -> dbErr
-submit (SClose hash token pollid) =
+submitR (SClose hash token pollid) = do
     let userKey = "user:" `B.append` hash
         pollid_txt = decodeUtf8 pollid
-    in  multiExec ( do
-            polldata <- hgetall ("poll:" `B.append` pollid)
-            userdata <- hgetall userKey
-            pure $ (,) <$> polldata <*> userdata
-        ) >>= \case
-            TxSuccess (pdata, udata) ->
-                if null pdata then noPoll else
-                if null udata then noUser else
-                if missingFrom [("active","true"), ("author_hash", hash)] pdata then pure . Left . R.Err Custom
-                    $ "Either the poll was closed already, or you don't have closing rights." else
-                if missingFrom [("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ mempty
-                else do
-                hset ("poll:" `B.append` pollid) "active" "false"
-                pure . Right . R.Ok $ "This poll was closed: " `T.append` pollid_txt
-            _ -> pure . Left . R.Err PollNotExist $ pollid_txt
-
-submit (STake hash token finger email pollid answers) =
+    got_data <- multiExec $ do
+        polldata <- hgetall ("poll:" `B.append` pollid)
+        userdata <- hgetall userKey
+        pure $ (,) <$> polldata <*> userdata
+    case got_data of
+        TxSuccess (pdata, udata) ->
+            if null pdata then noPoll else
+            if null udata then noUser else
+            if missingFrom [("active","true"), ("author_hash", hash)] pdata then pure . Left . R.Err Custom
+                $ "Either the poll was closed already, or you don't have closing rights." else
+            if missingFrom [("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ mempty
+            else do
+            hset ("poll:" `B.append` pollid) "active" "false"
+            pure . Right . R.Ok $ "This poll was closed: " `T.append` pollid_txt
+        _ -> pure . Left . R.Err PollNotExist $ pollid_txt
+submitR (STake hash token finger email pollid answers) = do
     let pollid_txt = decodeUtf8 pollid
         userKey = "user:" `B.append` hash
-    in  multiExec ( do
+    got_data <- multiExec $ do
             polldata <- hgetall ("poll:" `B.append` pollid)
             userdata <- hgetall userKey
             ismemberH <- sismember ("participants_hashes:" `B.append` pollid) hash
             ismemberF <- sismember ("participants_fingerprints:" `B.append` pollid) hash
             pure $ (,,,) <$> polldata <*> userdata <*> ismemberH <*> ismemberF
-        ) >>= \case TxSuccess (pdata, udata, isH, isF) ->
-                        if missingFrom [("active","true")] pdata then pure . Left . R.Err PollInactive $ pollid_txt else
-                        if missingFrom [("token", token),("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ decodeUtf8 hash else
-                        if isF || isH then pure . Left . R.Err PollTakenAlready $ mempty else
-                                multiExec ( do
-                                sadd ("participants_hashes:" `B.append` pollid) [hash]
-                                sadd ("participants_fingerprints:" `B.append` pollid) [finger]
-                                sadd ("participants_email:" `B.append` pollid) [email]
-                                lpush ("answers:" `B.append` pollid `B.append` ":" `B.append` hash) answers
-                                ) >>= \case TxSuccess _ -> pure . Right . R.Ok $ "Answers submitted successfully!"
-                                            _  -> pure . Left . R.Err Database $ "Database error"
-                    _   -> pure . Left . R.Err Database $ "User or poll data missingFrom."
+    case got_data of
+        TxSuccess (pdata, udata, isH, isF) ->
+            if missingFrom [("active","true")] pdata then pure . Left . R.Err PollInactive $ pollid_txt else
+            if missingFrom [("token", token),("verified", "true")] udata then pure . Left . R.Err UserNotVerified $ decodeUtf8 hash else
+            if isF || isH then pure . Left . R.Err PollTakenAlready $ mempty else do
+            added_data <- multiExec $ do
+                sadd ("participants_hashes:" `B.append` pollid) [hash]
+                sadd ("participants_fingerprints:" `B.append` pollid) [finger]
+                sadd ("participants_email:" `B.append` pollid) [email]
+                lpush ("answers:" `B.append` pollid `B.append` ":" `B.append` hash) answers
+            case added_data of
+                TxSuccess _ -> pure . Right . R.Ok $ "Answers submitRted successfully!"
+                _  -> pure . Left . R.Err Database $ "Database error"
+        _   -> pure . Left . R.Err Database $ "User or poll data missingFrom."
 
 getAnswers p pollid =
     let key = "answers:" `B.append` pollid `B.append` ":" `B.append` p
@@ -210,45 +211,44 @@ getPollMetaScores pollid = smembers ("participants_hashes:" `B.append` pollid) >
 getPoll :: DbReqR -> Redis (Either (Err T.Text) (Poll, Bool, Maybe [Int], Maybe B.ByteString))
 {- Returns all data on a single poll, as a tuple
 <poll contents, whether is active, maybe the scores, maybe the secret> -}
-getPoll (SGet pollid) =
+getPoll (SGet pollid) = do
     let pollid_txt = decodeUtf8 pollid
-        key = ("poll:" `B.append` pollid)
-    in  hgetall key >>= \case
+        key = "poll:" `B.append` pollid
+    hgetall key >>= \case
         Left _ -> dbErr
         Right poll_raw ->
             if null poll_raw then noPoll else
             smembers ("participants_hashes:" `B.append` pollid) >>= \case
-            Right participants ->
-                if null participants then finish poll_raw Nothing
-                else let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
-                in  multiExec ( do
+            Right participants -> do
+                if null participants then finish poll_raw Nothing else do
+                let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
+                answers_poll_raw <- multiExec $ do
                     answers <- collectAnswers
                     poll_meta_data <- hgetall ("poll:" `B.append` pollid)
                     pure $ (,) <$> answers <*> poll_meta_data
-                    )
-                >>= \case
-                TxError _ -> dbErr
-                TxSuccess (res, poll_raw) ->
-                    let mb_decoded = sequence $ foldr decodeByteList [] res
-                    in  case mb_decoded of
-                        Just answers ->
-                            case collect answers of
-                            Left err -> pure . Left $ err
-                            Right collected ->
-                                let scores = Just $ reverse collected
-                                in  finish poll_raw scores
-                        Nothing -> borked
-    where   decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
-            decodeByteList val acc = traverse (fmap fst . readInt) val : acc
-            finish poll_raw mb_scores =
-                let poll_metadata = HMS.fromList poll_raw
-                    mb_secret = HMS.lookup "secret" poll_metadata
-                    active = Just "true" == HMS.lookup "active" poll_metadata
-                in  case HMS.lookup "recipe" poll_metadata of
-                        Nothing -> borked
-                        Just recipe -> case decodeStrict recipe :: Maybe Poll of
+                case answers_poll_raw of
+                    TxError _ -> dbErr
+                    TxSuccess (res, poll_raw) -> do
+                        let mb_decoded = sequence $ foldr decodeByteList [] res
+                        case mb_decoded of
+                            Just answers -> case collect answers of
+                                Left err -> pure . Left $ err
+                                Right collected ->
+                                    let scores = Just $ reverse collected
+                                    in  finish poll_raw scores
                             Nothing -> borked
-                            Just poll -> pure . Right $ (poll, active, mb_scores, mb_secret)
+    where
+        decodeByteList :: [B.ByteString] -> [Maybe [Int]] -> [Maybe [Int]]
+        decodeByteList val acc = traverse (fmap fst . readInt) val : acc
+        finish poll_raw mb_scores = do
+            let poll_metadata = HMS.fromList poll_raw
+                mb_secret = HMS.lookup "secret" poll_metadata
+                active = Just "true" == HMS.lookup "active" poll_metadata
+            case HMS.lookup "recipe" poll_metadata of
+                Nothing -> borked
+                Just recipe -> case decodeStrict recipe :: Maybe Poll of
+                    Nothing -> borked
+                    Just poll -> pure . Right $ (poll, active, mb_scores, mb_secret)
 
 getPollIdEndDate :: Redis (Either (Err T.Text) [(B.ByteString, B.ByteString)])
 {- Traverse the entire db and collects the endDate of all polls -}
@@ -301,9 +301,10 @@ getTakenCreated hash = smembers "polls" >>= \case
 getMyPollsData :: B.ByteString -> Redis (Either (Err T.Text) (HMS.HashMap T.Text [(T.Text, T.Text)], [T.Text], [T.Text]))
 {- Returns hashmap of all poll ids into pair of (bytestring maps of) polls taken, polls created -}
 getMyPollsData hash = getTakenCreated hash >>= \case
-    Right (taken, created) ->
+    Right (taken, created) -> do
         let both = taken ++ created
-        in  multiExec (sequence <$> traverse collectPoll both) >>= \case
+        collected <- multiExec $ sequence <$> traverse collectPoll both
+        case collected of
             TxSuccess res ->
                 let both_txt = map decodeUtf8 both
                     bi_map f (a, b) = (f a, f b)

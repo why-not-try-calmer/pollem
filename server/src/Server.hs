@@ -70,7 +70,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 let token_b = toCleanB token
                 putMVar mvar (n, gen)
                 sendEmail (emailToken (sendgridconf env) token_b email_b) >>= \case
-                    Right _ -> connDo (redisconn env) . submit $ asksubmit token_b
+                    Right _ -> connDo (redisconn env) . submitR $ asksubmit token_b
             case res of
                 Left err  -> pure . RespAskToken . R.renderError $ err
                 Right msg -> pure . RespAskToken . R.renderOk $ msg
@@ -83,7 +83,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 hashed = toCleanB . hashEmail $ email_b
             let confirmsubmit = SConfirm token_b fingerprint_b hashed
             env <- ask
-            liftIO (connDo (redisconn env) . submit $ confirmsubmit) >>= \case
+            liftIO (connDo (redisconn env) . submitR $ confirmsubmit) >>= \case
                 Left err  -> pure $ RespConfirmToken (R.renderError err) Nothing Nothing
                 Right msg -> pure $ RespConfirmToken (R.renderOk msg) (Just . decodeUtf8 $ hashed) (Just token)
 
@@ -115,7 +115,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                         secret <- produceSecret
                         case isoOrCustom . T.unpack $ startDate of
                             Left _ -> pure $ RespCreate (R.renderError (R.Err R.DatetimeFormat (mempty :: T.Text))) Nothing Nothing
-                            Right date -> liftIO (connDo (redisconn env) . submit $ SCreate hash_b email_b token_b pollid recipe_b startDate_b mb_endDate_b secret) >>=
+                            Right date -> liftIO (connDo (redisconn env) . submitR $ SCreate hash_b email_b token_b pollid recipe_b startDate_b mb_endDate_b secret) >>=
                                 \case   Left err -> stopOn err
                                         Right msg -> pure $ RespCreate (R.renderOk msg) (Just $ total + 1) (Just . decodeUtf8 $ secret)
             where
@@ -128,7 +128,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                 pollid_b = encodeUtf8 pollid
             env <- ask
             let conn = redisconn env
-            liftIO (connDo conn . submit $ SClose hash_b token_b pollid_b) >>= \case
+            liftIO (connDo conn . submitR $ SClose hash_b token_b pollid_b) >>= \case
                 Left err -> pure . RespClose . R.renderError $ err
                 Right _ -> liftIO (connDo conn . notifyOnDisable $ [pollid_b]) >>= \case
                     Left err -> pure . RespClose $ R.renderError err
@@ -197,7 +197,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
         take :: ReqTake -> AppM RespTake
         take (ReqTake hash token finger email pollid answers) = do
             env <- ask
-            res <- liftIO . connDo (redisconn env) . submit $
+            res <- liftIO . connDo (redisconn env) . submitR $
                 STake (encodeUtf8 hash) (encodeUtf8 token) (encodeUtf8 finger) (encodeUtf8 email) (encodeUtf8 pollid) (map encodeStrict answers)
             case res of
                 Left err  -> pure . RespTake . R.renderError $ err

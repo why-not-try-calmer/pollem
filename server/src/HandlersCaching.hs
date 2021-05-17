@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE RecordWildCards            #-}
+--{-# LANGUAGE RecordWildCards            #-}
 
 module HandlersCaching where
 
@@ -36,7 +36,7 @@ import           DatabaseR
 --
 data Connectors = Connectors { _mongopipe :: Pipe, _redisconnection :: Connection }
 
-data Stores = Stores { _inmem :: PollCache, _retries :: MVar Retries, _queue :: Chan Target, _connectors :: Connectors }
+data Stores = Stores { _inmem :: PollCache, _retries :: MVar Retries, _postqueue :: Chan Target, _connectors :: Connectors }
 
 data Target = Redis { _redis :: DbReqR } | Mongo { _mongo :: DbReqM }
 
@@ -44,7 +44,8 @@ type Retry = (T.Text, Target)
 
 type Retries = [Retry]
 
-data CmdManErrors = MongoErr T.Text | RedisErr T.Text | CacheErr T.Text deriving (Show)
+data CmdManErrors = MongoErr T.Text | RedisErr T.Text | CacheErr T.Text | RequestManagerErr T.Text
+    deriving(Show)
 
 newtype RequestManager a = RequestManager { unManager :: ExceptT CmdManErrors (ReaderT Stores IO) a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadError CmdManErrors, MonadReader Stores)
@@ -82,46 +83,24 @@ showRetries = ask >>= \env -> do
     let logs = _retries env
     read <- liftIO $ readMVar logs
     liftIO $ print . map fst $ read
-
-exec :: Connectors -> Target -> IO ()
-exec (Connectors pipe _) (Mongo create_req@SMCreate{..}) =
-    let doc = toBSON $ BSReq create_req
-    in  runMongo pipe (createPoll doc)
-exec (Connectors pipe _) (Mongo close_req@SMClose{..}) = runMongo pipe (closePoll close_poll_id)
-exec (Connectors pipe _) (Mongo ask_req@SMAsk{..}) = runMongo pipe (userAsk ask_hash ask_token)
-exec (Connectors pipe _) (Mongo confirm_req@SMConfirm{..}) = runMongo pipe (userConfirm confirm_hash confirm_token confirm_fingerprint)
-exec (Connectors pipe _) (Mongo take_req@SMTake{..}) =
-    let doc = toBSON $ BSReq take_req
-    in  runMongo pipe (insertParticipation answers_poll_id doc)
-
-enqueue :: Target -> RequestManager ()
-enqueue req = ask >>= \env -> do
-    let q = _queue env
-    liftIO $ writeChan q req
-
-dequeue :: RequestManager ()
-dequeue = ask >>= \env -> do
-    let q = _queue env
-        connectors = _connectors env
-        retries = _retries env
-    nextReq <- liftIO $ readChan q
-    liftIO (try $ exec connectors nextReq) >>= \case
-        -- catching all 'natural' MongoDB errors and rethrowing inside the RequestManager monad
-        Left err -> let e = err :: SomeException in throwError $ CacheErr (T.pack . show $ err)
-        Right _ -> pure ()
 --
 
 {- Requests -}
 
 --
+exec :: DbReqR -> RequestManager ()
+exec req = ask >>= \env -> do
+    let redisconn = _redisconnection . _connectors $ env
+    res <- liftIO . connDo redisconn . submitR $ req
+    case res of
+        Left _ -> throwError . RequestManagerErr $ 
+            "Unable to perform " `T.append` (T.pack . show $ req) `T.append` "against Redis."
+        --Right _ -> 
+
 handleRequests :: Stores -> DbReqR -> IO ()
-handleRequests stores (SAsk hash token) =
-    let newreq = ("Creating poll", Mongo $ SMCreate "ad" "ri" "en" "ET" "td" "er" (Just "et") "our")
-    in  do
-        runRequestManagerWith stores $ do
-            addRetry newreq
-            showRetries
-        print "ok"
+handleRequests stores req =
+    let redisconn = _redisconnection . _connectors $ stores
+    in  runRequestManagerWith stores $ exec req
 
 main :: IO ()
 main = do
