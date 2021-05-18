@@ -165,7 +165,7 @@ getAccess =
 runMongo :: MonadIO m => Pipe -> Action m a -> m a
 runMongo pipe = access pipe master "pollem"
 
-getEntireDb = do
+getEverything = do
     polls <- getAllPolls
     users <- getAllUsers
     if null polls then stopErrWith "Null polls!"
@@ -193,13 +193,11 @@ createUser hash fingerprint = insert "users" ["_id" =: hash, "fingerprint" =: fi
 userAsk hash token = updateUserWith hash ["token" =: token]
 userConfirm hash token fingerprint = updateUserWith hash ["token" =: token, "fingerprint" =: fingerprint]
 getAllUsers = find (select mempty "users") >>= rest
-
 --
 
 {- Polls -}
 
 --
-getAllPolls = find (select mempty "polls") >>= rest
 checkIfExistsPoll poll_id = findOne (select ["_id" =: poll_id] "polls") >>= \case
     Just poll -> pure True
     Nothing   -> pure False
@@ -210,6 +208,7 @@ createPoll = insert "polls"
 updatePollWith :: (MonadIO m, Val v) => v -> Document -> Action m ()
 updatePollWith poll_id = upsert (select ["_id" =: poll_id] "polls")
 closePoll poll_id = updatePollWith poll_id ["active" =: "false"]
+getAllPolls = find (select mempty "polls") >>= rest
 --
 
 {- Participations -}
@@ -282,15 +281,7 @@ submitM take@SMTake{} = do
         ]
     finishOkWith "Poll taken."
 
-main = do
-    let poll_id = "1234"
-    getAccess >>= \case
-        Just pipe ->
-            runMongo pipe $ do
-                createUser "adrieng" "fingerprint"
-                createPoll ["_id" =: poll_id]
-                insertParticipation poll_id ["poll_id" =: poll_id, "participant" =: "adrieng"]
-                getEntireDb >>= \case
-                    Left err  -> liftIO $ print err
-                    Right res -> liftIO . print $ renderOk res
-        Nothing   -> print "Unable to acquire pipe."
+main = getAccess >>= \case
+    Just pipe -> runMongo pipe $ do
+        getEverything >>= \case
+            Right res -> liftIO . print $ renderOk res
