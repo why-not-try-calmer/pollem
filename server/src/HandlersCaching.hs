@@ -15,6 +15,7 @@ import           Control.Monad.Reader   (MonadReader (ask),
 import qualified Data.ByteString        as B
 import qualified Data.HashMap.Strict    as HMS
 import qualified Data.Text              as T
+import           Data.Text.Encoding     (decodeUtf8)
 import           Data.Time              (UTCTime)
 import           Database.MongoDB       (Pipe)
 import           Database.Redis         (Connection)
@@ -91,16 +92,30 @@ showRetries = ask >>= \env -> do
 exec :: DbReqR -> RequestManager ()
 exec req = ask >>= \env -> do
     let redisconn = _redisconnection . _connectors $ env
-    res <- liftIO . connDo redisconn . submitR $ req
-    case res of
-        Left _ -> throwError . RequestManagerErr $ 
-            "Unable to perform " `T.append` (T.pack . show $ req) `T.append` "against Redis."
-        --Right _ -> 
+        mongopipe = _mongopipe . _connectors $ env
+    redis_res <- liftIO . connDo redisconn . submitR $ req
+    case redis_res of
+        Left _ -> throwError . RequestManagerErr $ "Unable to perform " `T.append` (T.pack . show $ req) `T.append` "against Redis."
+        Right _ -> liftIO ( do
+            print "Successfully saved to Redis"
+            runMongo mongopipe . redisToMongo $ req
+            ) >>= \case
+                Left _ -> throwError . RequestManagerErr $ "Unable to perform " `T.append` (T.pack . show $ req) `T.append` "against MongoDB."
+                Right _ -> liftIO $ print "Successfully saved to MongoDB."
+    where
+        redisToMongo (SCreate a b c d e f g h) = submitM $
+            SMCreate (decodeUtf8 a) (decodeUtf8 b) (decodeUtf8 c) (decodeUtf8 d) (decodeUtf8 e) (decodeUtf8 f) (fmap decodeUtf8 g) (decodeUtf8 h)
+        redisToMongo (SClose a b c) = submitM $ SMClose (decodeUtf8 a) (decodeUtf8 b) (decodeUtf8 c)
+        redisToMongo (SAsk x y) = submitM $ SMAsk (decodeUtf8 x) (decodeUtf8 y)
+        redisToMongo (SConfirm a b c) = submitM $ SMConfirm (decodeUtf8 a) (decodeUtf8 b) (decodeUtf8 c)
+        redisToMongo (STake a b c d e f) = submitM $
+            SMTake (decodeUtf8 a) (decodeUtf8 b) (decodeUtf8 c) (decodeUtf8 d) (decodeUtf8 e) (map decodeUtf8 f)
+
+
+
 
 handleRequests :: Stores -> DbReqR -> IO ()
-handleRequests stores req =
-    let redisconn = _redisconnection . _connectors $ stores
-    in  runRequestManagerWith stores $ exec req
+handleRequests stores req = runRequestManagerWith stores $ exec req
 
 main :: IO ()
 main = do
