@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
---{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE RecordWildCards            #-}
 
 module HandlersCaching where
 
@@ -14,13 +14,15 @@ import           Control.Monad.Reader   (MonadReader (ask),
                                          ReaderT (runReaderT), withReaderT)
 import qualified Data.ByteString        as B
 import qualified Data.HashMap.Strict    as HMS
+import           Data.Maybe             (fromMaybe)
 import qualified Data.Text              as T
 import           Data.Text.Encoding     (decodeUtf8)
 import           Data.Time              (UTCTime)
-import           Database.MongoDB       (Pipe)
+import           Database.MongoDB       (Pipe, Document, fetch)
 import           Database.Redis         (Connection)
 import           DatabaseM
 import           DatabaseR
+import           Times                  (getNow, isoOrCustom)
 {-
     The Request Manager takes a Request for input and yields a result to the caller (a servant handler).
     The logic is simple: it looks up the PollCache if the Request can be satisfied, then looks up Redis, and if the request still
@@ -68,11 +70,10 @@ initRequestManager cache =
         Left err -> print $ "runReaderT: caught this error: " ++ show err
         Right _  -> print "runReaderT: Request manager initialized."
 
-runRequestManagerWith :: Stores -> RequestManager a -> IO ()
-runRequestManagerWith stores operations =
-    runReaderT (runExceptT (unManager operations)) stores >>= \case
-        Left err -> print $ "runReaderT: caught this error: " ++ show err
-        Right _  -> pure ()
+runRequestManagerWith :: Stores -> RequestManager a -> IO (Either CmdManErrors a)
+runRequestManagerWith stores operations = runReaderT (runExceptT (unManager operations)) stores >>= \case
+    Left err -> pure . Left . RequestManagerErr $ "Failed to run request"
+    Right res -> pure . Right $ res
 
 addRetry :: Retry -> RequestManager ()
 addRetry retry = ask >>= \env -> do
@@ -101,7 +102,7 @@ exec req = ask >>= \env -> do
             runMongo mongopipe . redisToMongo $ req
             ) >>= \case
                 Left _ -> throwError . RequestManagerErr $ "Unable to perform " `T.append` (T.pack . show $ req) `T.append` "against MongoDB."
-                Right _ -> liftIO $ print "Successfully saved to MongoDB."
+                Right res -> liftIO . print $ res
     where
         redisToMongo (SCreate a b c d e f g h) = submitM $
             SMCreate (decodeUtf8 a) (decodeUtf8 b) (decodeUtf8 c) (decodeUtf8 d) (decodeUtf8 e) (decodeUtf8 f) (fmap decodeUtf8 g) (decodeUtf8 h)
@@ -110,16 +111,53 @@ exec req = ask >>= \env -> do
         redisToMongo (SConfirm a b c) = submitM $ SMConfirm (decodeUtf8 a) (decodeUtf8 b) (decodeUtf8 c)
         redisToMongo (STake a b c d e f) = submitM $
             SMTake (decodeUtf8 a) (decodeUtf8 b) (decodeUtf8 c) (decodeUtf8 d) (decodeUtf8 e) (map decodeUtf8 f)
+        
+        
+fetchPoll :: DbReqR -> RequestManager PollInCache 
+fetchPoll req@SGet{..} = ask >>= \env -> do
+    let redisconn = _redisconnection . _connectors $ env
+        mongopipe = _mongopipe . _connectors $ env
+    redis_res <- liftIO . connDo redisconn . getPoll $ req
+    case redis_res of
+        {-Left _ -> runMongo mongopipe . redisToMongo $ req >>= \case
+            Nothing -> throwError . MongoErr $ "Unable to find document." 
+            Just doc -> 
+                let  = cast' . valueAt "" $ doc
+                    b
+                    c
+                    d
+        -}
+        Right (a,b,c,d,e) -> pure $ PollInCache a b c d e
+    where
+        redisToMongo (SGet pollid mb_secret) = getIfExistsPoll (decodeUtf8 pollid)
 
-
-
-
-handleRequests :: Stores -> DbReqR -> IO ()
+handleRequests :: Stores -> DbReqR -> IO (Either CmdManErrors a)
+handleRequests stores getReq@SGet{..} = do
+    let mvar = _inmem stores
+    now <- getNow
+    mmap <- readMVar mvar
+    case HMS.lookup get_poll_id mmap of
+        Nothing -> runRequestManagerWith stores $ fetchPoll getReq
+        Just (PollInCache _poll _active _results _lastTime _hasSecret) ->
+            if runningButMissing now _poll _hasSecret then pure . Left . RequestManagerErr $ "Bad secret." else
+            if poll_visible _poll || not _active then runRequestManagerWith stores $ fetchPoll getReq
+            else do
+                updateCache mvar get_poll_id now
+                pure . Right $ (_poll, _results)
+    where
+        runningButMissing now p sec =
+            let mismatch = fromMaybe False $ (/=) <$> sec <*> get_mb_secret
+                running a Nothing = False
+                running a mb_b = case poll_endDate p of
+                    Just b -> case isoOrCustom . T.unpack $ b of Right b_date -> a < b_date
+                    _ -> False
+            in  running now (poll_endDate p) && mismatch
+        updateCache mvar pid now = modifyMVar_ mvar (pure . HMS.update (\poll_in_cache -> Just (poll_in_cache { _lastLookUp = now })) pid)
 handleRequests stores req = runRequestManagerWith stores $ exec req
 
 main :: IO ()
 main = do
     cache <- initCache
-    initStores cache >>= \case
-        Right stores -> handleRequests stores (SAsk "1" "2")
-
+    print "ok"
+    -- initStores cache >>= \case
+    -- Right stores -> handleRequests stores (SAsk "1" "2")

@@ -113,7 +113,7 @@ data DbReqM =
         answers_poll_id     :: T.Text,
         answers_answers     :: [T.Text]
     } |
-    SMGet { get_poll_id :: T.Text }
+    SMGet { get_poll_id :: T.Text, get_mb_secret :: Maybe T.Text }
 
 data BSONable = BSPoll { _poll :: Poll } | BSReq { _req :: DbReqM }
 

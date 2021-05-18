@@ -20,12 +20,14 @@ import           Data.Aeson                  (ToJSON (toEncoding), encode,
                                               fromEncoding, fromJSON, toJSON)
 import           Data.Aeson.Extra            (encodeStrict)
 import qualified Data.ByteString             as B
+import qualified Data.ByteString.Char8       as B8
 import qualified Data.HashMap.Strict         as HMS
 import           Data.Maybe                  (fromMaybe)
 import qualified Data.Text                   as T
 import           Data.Text.Encoding
 import           Database.Redis              (Connection, PortID (PortNumber),
-                                              disconnect, info, runRedis, RedisType (String))
+                                              RedisType (String), disconnect,
+                                              info, runRedis)
 import           DatabaseR
 import qualified ErrorsReplies               as R
 import           Mailer
@@ -135,7 +137,7 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                     Right _  -> pure $ RespClose "ok"
 
         get :: Int -> Maybe String -> AppM RespGet
-        get pollid secret_req = do
+        get pollid mb_secret = do
             env <- ask
             liftIO $ do
                 now <- getNow
@@ -154,32 +156,32 @@ server = ask_token :<|> confirm_token :<|> create :<|> close :<|> get :<|> myhis
                             updateCache env pollid_b now
                             finish poll mb_results
                     -- not found in cache, querying db
-                    Nothing -> liftIO (connDo (redisconn env) . getPoll $ SGet pollid_b) >>= \case
+                    Nothing -> liftIO (connDo (redisconn env) . getPoll $ SGet pollid_b mb_secret_b) >>= \case
                         Left err -> stopWith err
                         Right (poll, active, mb_scores, mb_secret_stored_b) ->
-                            let res = (poll, active, mb_scores, now, mb_secret_req)
+                            let res = (poll, active, mb_scores, now, mb_secret_b)
                             -- as above, we exit early if the poll is still due to expire and we have bad credentials
-                            in if runningButMissing now poll (decodeUtf8 <$> mb_secret_stored_b) then stopWith badsecret else do
+                            in if runningButMissing now poll mb_secret_stored_b then stopWith badsecret else do
                                 -- adding to cache
                                 addToCache env res
                                 finish poll mb_scores
             where
                 pollid_b = encodeStrict pollid
-                mb_secret_req = T.pack <$> secret_req
+                mb_secret_b = B8.pack <$> mb_secret
                 runningButMissing now poll mb_secret_stored =
-                    let mismatch = fromMaybe False $ (/=) <$> mb_secret_req <*> mb_secret_stored
+                    let mismatch = fromMaybe False $ (/=) <$> mb_secret_b <*> mb_secret_stored
                         running a Nothing = False
                         running a mb_b = case poll_endDate poll of
                             Just b -> case isoOrCustom . T.unpack $ b of Right b_date -> a < b_date
                             _ -> False
                     in  running now (poll_endDate poll) && mismatch
-                goFetchScores pollid env now = liftIO (connDo (redisconn env) . getPoll $ SGet pollid) >>= \case
+                goFetchScores pollid env now = liftIO (connDo (redisconn env) . getPoll $ SGet pollid_b mb_secret_b) >>= \case
                     Left err -> pure $ RespGet (T.pack . show $ err) Nothing Nothing
                     Right (poll, active, mb_scores, mb_secret) -> do
                         updateCache env pollid now
                         finish poll mb_scores
                 updateCache env pollid now = modifyMVar_ (pollcache env) (pure . HMS.update (\poll_in_cache -> Just (poll_in_cache { _lastLookUp = now })) pollid)
-                addToCache env (poll, active, mb_scores, now, mb_secret_req) = modifyMVar_ (pollcache env) (pure . HMS.insert pollid_b (PollInCache poll active mb_scores now mb_secret_req))
+                addToCache env (poll, active, mb_scores, now, mb_secret_b) = modifyMVar_ (pollcache env) (pure . HMS.insert pollid_b (PollInCache poll active mb_scores now mb_secret_b))
                 badsecret = R.Err R.BadSecret (mempty :: T.Text)
                 stopWith err = pure $ RespGet (R.renderError err) Nothing Nothing
                 finish poll mb_scores = pure $ RespGet "Ok" (Just poll) mb_scores

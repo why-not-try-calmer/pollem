@@ -62,7 +62,7 @@ data DbReqR =
         answers_poll_id     :: B.ByteString,
         answers_answers     :: [B.ByteString]
     } |
-    SGet { get_poll_id :: B.ByteString }
+    SGet { get_poll_id :: B.ByteString, get_mb_secret :: Maybe B.ByteString }
     deriving (Show)
 --
 
@@ -211,7 +211,7 @@ getPollMetaScores pollid = smembers ("participants_hashes:" `B.append` pollid) >
 getPoll :: DbReqR -> Redis (Either (Err T.Text) (Poll, Bool, Maybe [Int], Maybe B.ByteString))
 {- Returns all data on a single poll, as a tuple
 <poll contents, whether is active, maybe the scores, maybe the secret> -}
-getPoll (SGet pollid) = do
+getPoll (SGet pollid mb_secret) = do
     let pollid_txt = decodeUtf8 pollid
         key = "poll:" `B.append` pollid
     hgetall key >>= \case

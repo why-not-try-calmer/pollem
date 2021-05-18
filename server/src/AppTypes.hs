@@ -135,10 +135,11 @@ data PollInCache = PollInCache {
     _isActive   :: Bool,
     _results    :: Maybe [Int],
     _lastLookUp :: UTCTime,
-    _hasSecret  :: Maybe T.Text
+    _hasSecret  :: Maybe B.ByteString 
 }
 
 type PollCache = MVar (HMS.HashMap B.ByteString PollInCache)
+
 initState :: IO PollCreator
 initState = do
     drg <- getSystemDRG
