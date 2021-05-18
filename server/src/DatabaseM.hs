@@ -168,15 +168,15 @@ runMongo pipe = access pipe master "pollem"
 getEntireDb = do
     polls <- getAllPolls
     users <- getAllUsers
-    if null polls then stopErrWith "Null polls!" else do
-    if null users then stopErrWith "Null users" else do
-    let mb_poll_ids = traverse (\p -> cast' . valueAt "_id" $ p :: Maybe T.Text) polls
-    case mb_poll_ids of
-        Nothing -> stopErrWith "Failed to collect poll ids. One or more poll ids are missing or inconsistent."
-        Just pollids -> do
-            participations <- traverse (getPollParticipations >=> rest) pollids
-            if null participations then stopErrWith "Found no participation!"
-            else finishOkWith (users, polls, participations)
+    if null polls then stopErrWith "Null polls!"
+    else if null users then stopErrWith "Null users" else do
+        let mb_poll_ids = traverse (\p -> cast' . valueAt "_id" $ p :: Maybe T.Text) polls
+        case mb_poll_ids of
+            Nothing -> stopErrWith "Failed to collect poll ids. One or more poll ids are missing or inconsistent."
+            Just pollids -> do
+                participations <- traverse (getPollParticipations >=> rest) pollids
+                if null participations then stopErrWith "Found no participation!"
+                else finishOkWith (users, polls, participations)
 --
 
 {- Users -}
@@ -282,8 +282,15 @@ submitM take@SMTake{} = do
         ]
     finishOkWith "Poll taken."
 
-main = getAccess >>= \case
-    Just pipe -> do
-        -- runMongo pipe $ createPoll ["_id" =: "ok"]
-        runMongo pipe getAllPolls >>= print
-    Nothing   -> print "Unable to acquire pipe."
+main = do
+    let poll_id = "1234"
+    getAccess >>= \case
+        Just pipe ->
+            runMongo pipe $ do
+                createUser "adrieng" "fingerprint"
+                createPoll ["_id" =: poll_id]
+                insertParticipation poll_id ["poll_id" =: poll_id, "participant" =: "adrieng"]
+                getEntireDb >>= \case
+                    Left err  -> liftIO $ print err
+                    Right res -> liftIO . print $ renderOk res
+        Nothing   -> print "Unable to acquire pipe."
