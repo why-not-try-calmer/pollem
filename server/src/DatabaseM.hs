@@ -4,9 +4,11 @@
 
 module DatabaseM where
 
-import           AppTypes                       (Poll (Poll))
+import           AppTypes                       (Poll (Poll),
+                                                 ReqTake (take_pollid))
 import           Control.Exception              (Exception, SomeException,
                                                  throwIO, try)
+import           Control.Monad.Cont             ((>=>))
 import           Control.Monad.Except           (MonadError (throwError))
 import           Control.Monad.IO.Class         (MonadIO (liftIO))
 import           Data.Maybe                     (fromMaybe)
@@ -17,7 +19,7 @@ import           Database.MongoDB               (AccessMode (UnconfirmedWrites),
                                                  Select (select),
                                                  Val (cast', val), Value,
                                                  access, auth, find, findOne,
-                                                 insert, master, upsert,
+                                                 insert, master, rest, upsert,
                                                  valueAt, (=:))
 import qualified Database.MongoDB.Transport.Tls as DbTLS
 import           ErrorsReplies
@@ -160,12 +162,24 @@ getAccess =
             if authorized then pure $ Just pipe
             else pure Nothing
 
-runMongo pipe action = do
-    access pipe master "pollem" action
-    pure ()
+runMongo :: MonadIO m => Pipe -> Action m a -> m a
+runMongo pipe = access pipe master "pollem"
+
+getEntireDb = do
+    polls <- getAllPolls
+    users <- getAllUsers
+    if null polls then stopErrWith "Null polls!" else do
+    if null users then stopErrWith "Null users" else do
+    let mb_poll_ids = traverse (\p -> cast' . valueAt "_id" $ p :: Maybe T.Text) polls
+    case mb_poll_ids of
+        Nothing -> stopErrWith "Failed to collect poll ids. One or more poll ids are missing or inconsistent."
+        Just pollids -> do
+            participations <- traverse (getPollParticipations >=> rest) pollids
+            if null participations then stopErrWith "Found no participation!"
+            else finishOkWith (users, polls, participations)
 --
 
-{- Actions -}
+{- Users -}
 
 --
 checkIfExistsUser hash = findOne (select ["_id" =: hash] "users") >>= \case
@@ -178,11 +192,17 @@ updateUserWith hash = upsert (select ["_id" =: hash] "users")
 createUser hash fingerprint = insert "users" ["_id" =: hash, "fingerprint" =: fingerprint, "verified" =: "true"]
 userAsk hash token = updateUserWith hash ["token" =: token]
 userConfirm hash token fingerprint = updateUserWith hash ["token" =: token, "fingerprint" =: fingerprint]
+getAllUsers = find (select mempty "users") >>= rest
+
 --
 
 {- Polls -}
 
 --
+getAllPolls = find (select mempty "polls") >>= rest
+checkIfExistsPoll poll_id = findOne (select ["_id" =: poll_id] "polls") >>= \case
+    Just poll -> pure True
+    Nothing   -> pure False
 getIfExistsPoll poll_id = findOne (select ["_id" =: poll_id] "polls")
 getIfPollWithFields fields = findOne (select fields "polls")
 createPoll :: MonadIO m => Document -> Action m Value
@@ -203,25 +223,67 @@ getPollParticipations poll_id = find (select [] ("polls." `T.append` poll_id))
 {- Handler -}
 
 --
-finishOkWith :: MonadIO m => T.Text -> m (Either (Err T.Text) (Ok T.Text))
+finishOkWith :: MonadIO m => a -> m (Either (Err T.Text) (Ok a))
 finishOkWith = pure . Right . Ok
 
-stopErrWith :: MonadIO m => T.Text -> m (Either (Err T.Text) (Ok T.Text))
+stopErrWith :: MonadIO m => T.Text -> m (Either (Err T.Text) (Ok a))
 stopErrWith = pure . Left . Err Database
 
 submitM :: MonadIO m => DbReqM -> Action m (Either (Err T.Text) (Ok T.Text))
 submitM (SMAsk hash token) = do
     exists <- checkIfExistsUser hash
-    if exists then userAsk hash token else do createUser hash ""; pure ()
-    finishOkWith "Stored new user to to MongoDb"
+    if exists then do
+        userAsk hash token
+        finishOkWith "Stored new user to to MongoDb"
+    else do
+        createUser hash ["_id" =: hash, "email" =: "", "token" =: "", "fingerprint" =: ""]
+        finishOkWith "User created"
 submitM (SMConfirm token fingerprint hash) = do
     mb_doc <- getIfExistsUser hash
     case mb_doc of
         Nothing -> stopErrWith "Unable to find document"
         Just doc -> do
-            let matched = Just token == (cast' . valueAt "token" $ doc :: Maybe T.Text)
-            if matched then do
-                userConfirm hash token fingerprint
-                finishOkWith "User confirmed."
-            else stopErrWith "Tokens don't match"
+            userConfirm hash token fingerprint
+            finishOkWith "User confirmed."
+submitM create@SMCreate{} = do
+    let poll_id = create_poll_id create
+    mb_doc <- getIfExistsPoll poll_id
+    case mb_doc of
+        Nothing -> stopErrWith "Document not found."
+        Just doc -> do
+            let base = [
+                    "_id" =: poll_id,
+                    "author_hash" =: create_poll_hash create,
+                    "author_email" =: create_poll_email create,
+                    "secret" =: create_poll_secret create,
+                    "recipe" =: create_poll_recipe create,
+                    "startDate" =: create_poll_startDate create,
+                    "active" =: "true"
+                    ]
+                poll = maybe base (\endate -> ("endDate" =: endate): base) $ create_poll_endDate create
+            createPoll poll
+            finishOkWith "Poll created"
+submitM close@SMClose{} = do
+    let poll_id = close_poll_id close
+    exists <- checkIfExistsPoll poll_id
+    if exists then do
+        updatePollWith (close_poll_id close) ["active" =: "false"]
+        finishOkWith "Poll closed."
+    else stopErrWith "Cannot close nonexistent polls."
+submitM take@SMTake{} = do
+    let poll_id = answers_poll_id take
+    insertParticipation poll_id [
+        "poll_id" =: poll_id,
+        "hash" =: answers_hash take,
+        "fingerprint" =: answers_fingerprint take,
+        "email" =: answers_fingerprint take,
+        "token" =: answers_token take,
+        "answers" =: answers_answers take
+        ]
+    finishOkWith "Poll taken."
 
+main = getAccess >>= \case
+    Just pipe -> do
+        -- runMongo pipe $ createPoll ["_id" =: "ok"]
+        runMongo pipe getAllPolls >>= print
+    Nothing   -> print "Unable to acquire pipe."

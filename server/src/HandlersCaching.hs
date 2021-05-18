@@ -107,3 +107,4 @@ main = do
     cache <- initCache
     initStores cache >>= \case
         Right stores -> handleRequests stores (SAsk "1" "2")
+

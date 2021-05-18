@@ -219,7 +219,7 @@ getPoll (SGet pollid) = do
         Right poll_raw ->
             if null poll_raw then noPoll else
             smembers ("participants_hashes:" `B.append` pollid) >>= \case
-            Right participants -> do
+            Right participants ->
                 if null participants then finish poll_raw Nothing else do
                 let collectAnswers = sequence <$> traverse (`getAnswers` pollid) participants
                 answers_poll_raw <- multiExec $ do
