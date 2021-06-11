@@ -13,7 +13,7 @@ import           Control.Monad.Except
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Control.Monad.Reader   (MonadReader (ask),
                                          ReaderT (runReaderT), withReaderT)
-import           Data.Aeson.Extra       (decodeStrict)
+import           Data.Aeson       (decodeStrict)
 import qualified Data.ByteString        as B
 import qualified Data.ByteString.Char8  as B8
 import           Data.Functor           (($>), (<&>))
